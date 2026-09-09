@@ -72,7 +72,10 @@ export async function runCapturePipeline(
   const capturedAt = capture.capturedAt as Date;
 
   // --- Reject non-cats / low-confidence detections -------------------------
-  if (!cv.isCat) {
+  // The no-API-key mock result (cv.mock) is exempt: it deliberately carries
+  // confidence 0.0, and its whole purpose is to let the pipeline run
+  // end-to-end in local dev. A real reading still has to clear the gate.
+  if (!cv.mock && !cv.isCat) {
     capture.status = "failed";
     capture.error = {
       stage: "cv_analysis",
@@ -81,7 +84,7 @@ export async function runCapturePipeline(
     await capture.save();
     return { status: "failed", rejectedReason: "not_a_cat" };
   }
-  if (cv.confidence < MIN_CAT_CONFIDENCE) {
+  if (!cv.mock && cv.confidence < MIN_CAT_CONFIDENCE) {
     capture.status = "failed";
     capture.error = {
       stage: "cv_analysis",

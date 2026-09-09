@@ -1,7 +1,14 @@
 """services/ai/app/main.py — FastAPI entrypoint for the AI microservice."""
 
-from fastapi import FastAPI
-from app.routers import cv, imagegen
+# Load services/ai/.env (ANTHROPIC_API_KEY, CLOUDINARY_*, ...) for standalone
+# `uvicorn` dev. Real environment variables — e.g. docker-compose's
+# `environment:` block — take precedence (override=False).
+from dotenv import load_dotenv
+
+load_dotenv(override=False)
+
+from fastapi import FastAPI  # noqa: E402
+from app.routers import cv, imagegen  # noqa: E402
 
 app = FastAPI(
     title="PawBall Chronicles AI Service",

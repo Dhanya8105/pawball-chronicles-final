@@ -5,6 +5,7 @@ httpx==0.27.2
 pillow==10.4.0
 cloudinary==1.41.0
 python-multipart==0.0.12
+python-dotenv==1.0.1
 
 # CV pipeline is now Claude Vision (app/services/vision_cv.py) — a single
 # Anthropic Messages API call with an image, no local model weights. The
