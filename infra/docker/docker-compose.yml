@@ -1,0 +1,75 @@
+version: "3.9"
+
+# Local dev stack. Runs every service Placeholder-image-gen-capable end to end
+# without any GPU provisioning — set IMAGE_GEN_PROVIDER=comfyui on the ai
+# service once a real GPU host (local or remote) is available; no other
+# service in this file needs to change.
+#
+# NOTE: build context for web/api is the repo root (../..), not their own
+# app folders — apps/api/Dockerfile and apps/web/Dockerfile both copy from
+# the workspace root (package.json, packages/shared-types) since they're
+# npm workspace members, not standalone packages. This compose file lives at
+# infra/docker/, so paths below are relative to that location.
+
+services:
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  ai:
+    build:
+      context: ../../services/ai
+      dockerfile: Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      - IMAGE_GEN_PROVIDER=placeholder
+      - IMAGE_GEN_FALLBACK_CHAIN=placeholder
+      - MODEL_CACHE_DIR=/app/model_cache
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+    volumes:
+      - ../../services/ai/app:/app/app  # live-reload mount for dev
+      # Run scripts/download_models.sh (repo root, MODEL_CACHE_DIR=../../model_cache)
+      # once on the host before `docker compose up` so the cv pipeline has
+      # real weights to load — see that script's header comment for why
+      # this is a manual step rather than baked into the image build here.
+      - ../../model_cache:/app/model_cache
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    ports: ["4000:4000"]
+    depends_on: [mongo, redis, ai]
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - CORS_ORIGIN=http://localhost:3000
+      - MONGO_URI=mongodb://mongo:27017/pawball
+      - REDIS_URL=redis://redis:6379
+      - AI_SERVICE_URL=http://ai:8000
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    ports: ["3000:3000"]
+    depends_on: [api]
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+
+volumes:
+  mongo-data:

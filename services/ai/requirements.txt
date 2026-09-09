@@ -1,0 +1,31 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+httpx==0.27.2
+pillow==10.4.0
+cloudinary==1.41.0
+python-multipart==0.0.12
+
+# CV / embedding stack — implementations now live in pipelines/cv/ and
+# pipelines/embeddings/. See scripts/download_models.sh (repo root) for the
+# one-time model weight download step these require.
+#
+# Disk footprint note (learned from actually installing this during
+# Milestone 3 development): torch's PyPI wheel bundles CUDA libraries and
+# is ~800MB even for CPU-only usage; ultralytics' own dependency pins can
+# trigger pip to resolve a SECOND torch install if installed in the same
+# command without torch already present, doubling that footprint
+# unnecessarily. Installing torch and torchvision first, then ultralytics
+# with --no-deps plus its few genuinely-missing small deps, avoided this in
+# practice. A production Docker build should pin a CPU-specific torch wheel
+# (e.g. from a CPU-only extra index) to avoid the bundled CUDA libraries
+# entirely, since this AI service's actual inference here is CPU-bound
+# (CLIP zero-shot, YOLOv8n) unless deployed to a GPU host for image
+# generation (see docs/architecture/03-ai-pipeline.md).
+torch==2.4.1
+torchvision==0.19.1
+transformers==4.45.2
+ultralytics==8.3.0      # YOLOv8
+faiss-cpu==1.8.0.post1  # swap to faiss-gpu on the GPU host if needed
+diffusers==0.30.3        # used by ComfyUI-adjacent tooling / local SDXL fallback testing
+huggingface_hub==0.25.2  # used by scripts/download_models.sh to fetch CLIP weights
