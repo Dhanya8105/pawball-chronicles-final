@@ -1,14 +1,16 @@
 """
 services/ai/app/schemas/cv_result.py
 
-Matches docs/architecture/03-ai-pipeline.md's /cv/analyze contract exactly.
-The "never invent confidence values" rule (directly from the project brief)
-is enforced here at the type level, not just by convention: every
-model-backed field has confidence: float (required), and the one
-heuristic-based field (tail_visible has no real classifier behind it in
-this milestone — see pipelines/cv/tail.py) is typed as confidence: float |
-None, so a caller MUST explicitly pass None rather than being able to
-silently default to some plausible-looking number.
+Matches docs/architecture/03-ai-pipeline.md's /cv/analyze contract and the
+`CvAnalysisResult` type in packages/shared-types. The "never invent
+confidence values" rule still holds: for a real cat reading every
+model-backed field carries Claude Vision's own confidence estimate; when no
+cat is present the orchestrator fills `label:"unknown", confidence:0.0`
+rather than fabricating a plausible number.
+
+`mock` is set to true only by the no-API-key fallback in
+app/services/vision_cv.py, so a caller can tell a real analysis apart from
+the dev placeholder.
 """
 
 from pydantic import BaseModel
@@ -21,7 +23,7 @@ class CvAnalyzeRequest(BaseModel):
 
 class ConfidenceValue(BaseModel):
     label: str
-    confidence: float  # 0.0-1.0, always the model's real output
+    confidence: float  # 0.0-1.0
 
 
 class NullableConfidenceValue(BaseModel):
@@ -52,3 +54,4 @@ class CvAnalysisResult(BaseModel):
     coat: CoatResult
     estimated_age_group: ConfidenceValue
     surroundings: list[SurroundingLabel]
+    mock: Optional[bool] = None

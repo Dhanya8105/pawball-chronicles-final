@@ -2,162 +2,162 @@
 
 > Every Cat Has A Legend.
 
-**Status: Milestone 3 — Computer Vision complete**, with a significant
-caveat worth reading before relying on it: the development sandbox this
-was built in has no network access to any model-weight host (HuggingFace,
-GitHub release assets, PyTorch's CDN — all confirmed unreachable). The CV
-pipeline is fully implemented with real libraries and fails loudly (clear
-503, never fake data) when weights aren't present. **You need to run
-`scripts/download_models.sh` once, on a machine with normal internet
-access, before the CV pipeline produces real results.** See
-`CHANGELOG.md` for the full, specific breakdown of what's verified vs.
-what needs your machine to confirm.
+A mobile-first PWA cat-collection game: photograph a cat, and the Chronicle
+turns it into a collectible RPG legend — bonded to where and when you found
+it. Pokémon GO meets a trading-card game.
 
-## Quick start (local, no Docker)
+---
 
-Requires Node.js ≥ 20, Python ≥ 3.11, MongoDB, and Redis.
+## Quick start
+
+**Requirements:** Node 20+, Docker, Python 3.11+ (for `services/ai` — or run it
+in Docker via the full-stack compose file below).
+
+### 1. Infra — MongoDB + Redis
 
 ```bash
-# from repo root
-npm install
-cp .env.example apps/api/.env        # fill in real values
-cp .env.example apps/web/.env.local
-npm run dev
+cd infra/docker && docker compose up -d mongo redis
 ```
 
-### Setting up the AI service (CV pipeline)
+### 2. API → http://localhost:4000
+
+```bash
+cd apps/api
+cp .env.example .env
+npm install && npm run dev
+```
+
+Starts the Express API, the BullMQ analyze-capture worker, and the weekly-life
+worker in one process. Needs Mongo up (step 1); Redis is used by the queues
+(without it the HTTP server still boots — capture enqueues just fail loudly).
+
+### 3. AI service — Claude Vision CV → http://localhost:8000
 
 ```bash
 cd services/ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-
-# One-time: download real model weights (needs normal internet access —
-# see this script's header comment for exactly which hosts are required
-# and why this can't be automatic in every environment)
-cd ..
-./scripts/download_models.sh
-
-cd services/ai
-uvicorn app.main:app --reload   # http://localhost:8000/health
+cp .env.example .env          # add ANTHROPIC_API_KEY — optional (see below)
+uvicorn app.main:app --reload
 ```
 
-Without running `download_models.sh`, `services/ai` still starts and
-`/health` still works — but `POST /cv/analyze` will return a `503` with a
-message telling you exactly which weight is missing and how to fix it. This
-is intentional: the service never fabricates a CV result.
+**CV is Claude Vision now** — `POST /cv/analyze` sends the image to the
+Anthropic Messages API (`claude-sonnet-4-6`, vision) and returns a structured
+`CvAnalysisResult`. **No model weights to download.** Without an
+`ANTHROPIC_API_KEY` the endpoint returns a clearly-labelled mock
+(`"mock": true`, all confidences `0.0`, breed `"Domestic Shorthair"`) so the
+capture → bond → lore pipeline still runs end-to-end in local dev.
 
-### Redis
+### 4. Web → http://localhost:3000
 
 ```bash
-# Debian/Ubuntu
-sudo apt install redis-server
-sudo systemctl start redis-server
-# or just: redis-server --daemonize yes
+cd apps/web
+cp .env.local.example .env.local
+npm install && npm run dev
 ```
 
-The capture pipeline's BullMQ queue needs Redis to be reachable at
-`REDIS_URL` (default `redis://localhost:6379`) — without it, capture
-uploads will still succeed (the photo gets stored) but the analyze job
-will fail to enqueue.
+---
+
+## What works
+
+- **Auth** — register / login / JWT access + refresh (rotation + revocation)
+- **Cat capture → Claude Vision CV → deterministic RPG identity** — upload a
+  photo, poll the pipeline, get a collectible card. Region → Bond → Aura →
+  Lore all run in `apps/api` as rule tables + a seeded RNG (no LLM), so the
+  same encounter always produces the same legend.
+- **Collection** — server-side search / filter (rarity, breed, bond level) /
+  sort, with a bond progress bar and a bottom-sheet card detail
+- **Map** — Leaflet with rarity-coloured circle markers, viewport-scoped
+  (`bbox`) marker fetch
+- **Journal** — per-PawBall memory timeline: discovered / bond-unlock /
+  weekly-life entries
+- **Weekly life tick** — BullMQ repeatable job (Mondays 06:00) appends one
+  `weekly_life` memory per PawBall, idempotent per ISO week
+
+## What needs real credentials to fully function
+
+| Variable | Used by | Without it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `services/ai` | `POST /cv/analyze` returns a labelled **mock** `CvAnalysisResult` (`mock: true`). The pipeline runs; every capture just becomes a "Domestic Shorthair" with 0-confidence readings. |
+| `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | `apps/api` | The capture upload step returns **`503 CAPTURE_PIPELINE_FAILED`** ("Image storage is not configured"). There is **no local-disk fallback** — capture needs Cloudinary. |
+| `GOOGLE_CLIENT_ID` / `_SECRET` | `apps/api` | `POST /auth/google` returns `503`. Email/password auth is unaffected. |
+
+---
 
 ## Running the tests
 
 ```bash
-# apps/api
-npm run test --workspace=apps/api       # full suite, needs MongoDB binary download
-npm run test:unit --workspace=apps/api  # MongoDB-independent subset — this
-                                         # is what was verified in this
-                                         # project's own development sandbox,
-                                         # including 4 tests against a real
-                                         # local Redis instance
+# apps/api — needs a local Redis for the 4 real-queue tests; the Mongo-backed
+# integration tests (auth.test.ts, capture.test.ts, analyzeCapture.worker.test.ts)
+# download a mongod binary via mongodb-memory-server on first run.
+cd apps/api
+npm run test          # full suite
+npm run test:unit     # Mongo-independent subset (+ real-Redis queue tests)
 
-# services/ai
-cd services/ai
-python3 -m pytest tests/ -v             # all 18 tests are model-weight-
-                                         # independent and should pass
-                                         # without running download_models.sh
+# services/ai — no API key needed (mock path + pure helpers)
+cd services/ai && python3 -m pytest -q
+
+# type-check / lint
+npm run build --workspace=packages/shared-types
+cd apps/api && npx tsc --noEmit && npm run lint
+cd apps/web && npx tsc --noEmit && npm run build
 ```
 
-## Quick start (Docker)
+## Quick start (Docker, full stack)
 
 ```bash
-cp .env.example .env
-./scripts/download_models.sh   # populates ./model_cache, mounted into the ai container
+cp .env.example .env          # fill ANTHROPIC_API_KEY + CLOUDINARY_* + JWT secrets
 cd infra/docker
 docker compose build
 docker compose up
 ```
 
-**Note, carried over from previous milestones:** the Docker path is
-configured and statically validated but has not been executed end-to-end
-in this development environment (no Docker daemon available here). Please
-run `docker compose build` yourself and report back if anything surfaces.
+Brings up Mongo, Redis, `services/ai`, `apps/api`, and `apps/web` together.
+The `ai` image no longer bundles PyTorch/CLIP, so the build is small.
 
 ## Environment variables
 
-See the annotated `.env.example` at the repo root. New in this milestone:
+Annotated master list: `.env.example` at the repo root. Per-service copies:
+`apps/api/.env`, `apps/web/.env.local`, `services/ai/.env`.
 
-| Variable | Used by | Required? |
+| Variable | Service | Required? |
 |---|---|---|
-| `REDIS_URL` | apps/api | **Yes, as of this milestone** — the capture pipeline's BullMQ queue needs it |
-| `MODEL_CACHE_DIR` | services/ai | No (defaults to `./model_cache`) — populate it via `scripts/download_models.sh` |
-| `AI_SERVICE_URL` | apps/api | Yes — defaults to `http://localhost:8000`, must point at a running `services/ai` |
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `npm run dev` | Runs `apps/web` + `apps/api` (now including the BullMQ worker) concurrently |
-| `npm run build` | Builds `shared-types` → `apps/web` → `apps/api` |
-| `npm run lint` | Lints both apps |
-| `npm run test:unit --workspace=apps/api` | MongoDB-independent tests, including real-Redis BullMQ tests |
-| `./scripts/download_models.sh` | One-time model weight download (needs normal internet access) |
+| `MONGO_URI` | apps/api | Yes |
+| `REDIS_URL` | apps/api | Yes (queues) — HTTP still boots without it |
+| `JWT_SECRET`, `JWT_REFRESH_SECRET` | apps/api | Yes |
+| `AI_SERVICE_URL` | apps/api | Yes — defaults to `http://localhost:8000` |
+| `CLOUDINARY_*` | apps/api | Needed for capture upload (no fallback) |
+| `ANTHROPIC_API_KEY` | services/ai | Optional — mock CV without it |
+| `NEXT_PUBLIC_API_URL` | apps/web | Yes — defaults to `http://localhost:4000/api/v1` |
 
 ## Repo layout
 
 ```
 apps/
-  web/      Next.js 15 PWA
-  api/      Express backend — now with BullMQ queue + worker (src/queues/, src/jobs/)
+  web/      Next.js 15 PWA — capture / collection / map / journal, 430px mobile shell
+  api/      Express + TS — auth, capture pipeline, Region/Bond/Aura/Lore engines,
+            read APIs (pawballs / collection / map), BullMQ workers
 services/
-  ai/       FastAPI AI service — now with a real CV pipeline (app/pipelines/cv/)
-scripts/
-  download_models.sh   one-time model weight setup (NEW this milestone)
-docs/
-  architecture/   03-ai-pipeline.md and 04-api-contracts.md updated this milestone
+  ai/       FastAPI — CV via Claude Vision (app/services/vision_cv.py),
+            swappable image-generation provider (placeholder by default)
+packages/
+  shared-types/   the API contract, consumed by both apps
 infra/
-  docker/   docker-compose.yml now mounts a model_cache volume for the ai service
+  docker/   docker-compose.yml — full local stack
+docs/
+  architecture/   system / data-schema / ai-pipeline / api-contracts
 ```
 
-## What's implemented vs. designed-but-not-yet-built
+## Architecture notes
 
-**Implemented this milestone:**
-- Real YOLOv8 cat detection with real confidence scores
-- Real CLIP zero-shot classification for breed, pose, coat, age,
-  facial features, and surroundings (see `CHANGELOG.md` for why
-  zero-shot rather than the originally-specified fine-tuned classifiers)
-- A tail-visibility heuristic that honestly returns no confidence value
-- The full `/cv/analyze` endpoint, with a clean 503 (never fake data)
-  when models aren't downloaded
-- BullMQ queue + worker wiring the capture pipeline's `pending_analysis →
-  analyzed | failed` transition for real
-
-**Carried over from previous milestones, untouched:**
-- Auth, MongoDB persistence, Cloudinary upload (Milestone 2)
-- The swappable `ImageGenerationProvider` (Milestone 1/architecture phase)
-
-**Not yet built:** Aura/Lore/Region/Bond/Weekly-Life engines, the
-generating_art → complete pipeline stages, the map and collection UI, real
-FLUX/SDXL artwork generation, production hardening, and (within this
-milestone's own scope) a real fine-tuned breed classifier and an SSE
-alternative to capture-status polling.
-
-## Next milestone
-
-**Milestone 4 — Environment Intelligence**: extending the surroundings
-classification into a structured environment profile (combining CV
-surroundings labels with weather/time-of-day data), and persisting it per
-capture for the Region Engine (Milestone 5+) to consume. Awaiting approval
-to proceed per the iteration process.
+- **Deterministic engines, not LLM black boxes.** Region, Bond, Aura, and Lore
+  are rule tables + a seeded mulberry32 RNG in `apps/api/src/modules/`. The
+  seed is `sha256(userId | capturedAt | breed | coatColor)`, so a capture is
+  fully reproducible and unit-testable. The only model call in the system is
+  `services/ai`'s Claude Vision CV.
+- **Bond re-identification** currently matches on owner + breed + coat within
+  ~250m of a prior sighting (documented interim for a future CLIP-embedding +
+  FAISS service).
+- **Artwork** is the original capture photo for now; the swappable
+  `ImageGenerationProvider` (ComfyUI / SDXL / placeholder) is wired but real
+  FLUX/SDXL generation is a later milestone.

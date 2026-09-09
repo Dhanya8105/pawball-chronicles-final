@@ -29,17 +29,14 @@ services:
     environment:
       - IMAGE_GEN_PROVIDER=placeholder
       - IMAGE_GEN_FALLBACK_CHAIN=placeholder
-      - MODEL_CACHE_DIR=/app/model_cache
+      # CV is Claude Vision now. Without a key the /cv/analyze endpoint
+      # returns a labelled mock so the stack still runs end-to-end.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
     volumes:
       - ../../services/ai/app:/app/app  # live-reload mount for dev
-      # Run scripts/download_models.sh (repo root, MODEL_CACHE_DIR=../../model_cache)
-      # once on the host before `docker compose up` so the cv pipeline has
-      # real weights to load — see that script's header comment for why
-      # this is a manual step rather than baked into the image build here.
-      - ../../model_cache:/app/model_cache
 
   api:
     build:
