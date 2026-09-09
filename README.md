@@ -78,12 +78,14 @@ fallback.
 ## Running the tests
 
 ```bash
-# apps/api — needs a local Redis for the 4 real-queue tests; the Mongo-backed
-# integration tests (auth.test.ts, capture.test.ts, analyzeCapture.worker.test.ts)
-# download a mongod binary via mongodb-memory-server on first run.
+# apps/api — needs a local Redis (127.0.0.1:6379) for the queue tests;
+# auth.test.ts / capture.test.ts download a mongod via mongodb-memory-server
+# on first run.
 cd apps/api
-npm test              # full suite
-npm run test:unit     # Mongo-independent subset (+ real-Redis queue tests)
+npm test              # 46 tests, 8 files
+npm run test:unit     # Mongo-independent subset
+npm run test:integration   # analyzeCapture.worker.test.ts — real BullMQ + Redis
+                           # + mongo-memory; flaky under Vitest, run on demand
 
 # services/ai — no API key needed (mock path + pure helpers)
 cd services/ai && python -m pytest -q

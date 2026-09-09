@@ -1,18 +1,18 @@
 /**
  * apps/api/test/analyzeCapture.worker.test.ts
  *
- * Runs against a REAL local Redis instance (this sandbox has redis-server
- * installed via apt and running — unlike MongoDB, which has no available
- * binary at all here; see CHANGELOG.md for the full contrast). This is
- * genuine integration coverage of the BullMQ producer/worker wiring, not a
- * mock — jobs are actually enqueued, actually picked up by a real Worker,
- * and the Capture document is actually updated as a result.
+ * INTEGRATION-ONLY — not part of `npm test`. Run with `npm run test:integration`
+ * (needs a local Redis on 127.0.0.1:6379).
  *
- * services/ai itself is mocked (via vi.mock on aiServiceClient) since
- * standing up the real FastAPI process inside this test run is out of
- * scope — but the BullMQ mechanics (enqueue -> pickup -> process -> retry
- * -> failure-after-exhausted-attempts -> write error to Mongo) are fully
- * real and exercised end-to-end.
+ * It wires a real BullMQ Worker to a real Redis and a mongodb-memory-server
+ * and drives a job through `startAnalyzeCaptureWorker` + the full capture
+ * pipeline. Useful as a smoke test, but flaky under Vitest's process model —
+ * the BullMQ worker intermittently doesn't begin consuming within the poll
+ * window. Deterministic coverage of the BullMQ mechanics lives in
+ * `queueMechanics.test.ts` (real Redis, no Mongo); the end-to-end
+ * worker -> pipeline path is exercised manually against the running stack.
+ *
+ * services/ai is mocked (vi.mock on aiServiceClient).
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +42,7 @@ import { connectDb, disconnectDb } from "../src/db/mongoose";
 
 const REDIS_CONNECTION = { host: "127.0.0.1", port: 6379 };
 
-async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5000): Promise<void> {
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 12000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (await predicate()) return;
@@ -57,30 +57,36 @@ describe("analyze-capture worker (real Redis, mocked AI service)", () => {
   beforeAll(async () => {
     // This suite needs Mongo too (Capture documents are real Mongoose
     // docs) — uses mongodb-memory-server like the rest of the auth/capture
-    // suites. If that download is blocked in this environment (see
-    // CHANGELOG.md), this suite will fail at this step the same way
-    // auth.test.ts/capture.test.ts do, for the same documented reason.
+    // suites.
     const { MongoMemoryServer } = await import("mongodb-memory-server");
     const mongod = await MongoMemoryServer.create();
     await connectDb(mongod.getUri());
     (globalThis as any).__mongod = mongod;
+    // One long-lived worker for the whole suite — creating/closing a BullMQ
+    // worker per test races (a half-closed worker can hold a job's lock and
+    // stall the next test).
+    worker = startAnalyzeCaptureWorker();
+    await worker.waitUntilReady();
   }, 60_000);
 
   afterAll(async () => {
+    await worker.close();
+    await analyzeCaptureQueue.close();
     await disconnectDb();
     const mongod = (globalThis as any).__mongod;
     if (mongod) await mongod.stop();
-    await analyzeCaptureQueue.close();
   });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    worker = startAnalyzeCaptureWorker();
-    await worker.waitUntilReady();
   });
 
   afterEach(async () => {
-    await worker.close();
+    // Drain the queue so a leftover retrying job can't bleed into the next
+    // test, then wipe Mongo.
+    await analyzeCaptureQueue.drain(true);
+    await analyzeCaptureQueue.clean(0, 10_000, "completed");
+    await analyzeCaptureQueue.clean(0, 10_000, "failed");
     const collections = mongoose.connection.collections;
     for (const key of Object.keys(collections)) {
       await collections[key].deleteMany({});
@@ -102,11 +108,22 @@ describe("analyze-capture worker (real Redis, mocked AI service)", () => {
     });
   }
 
-  it("processes a real enqueued job and marks the capture analyzed", async () => {
+  it("processes a real enqueued job: writes cvResult and runs the pipeline to completion", async () => {
+    // A full CvAnalysisResult — the worker now runs the deterministic
+    // pipeline (region -> bond -> aura -> lore) after writing cvResult, so a
+    // partial result would crash it. See modules/capture/capture.pipeline.ts.
     const fakeCvResult = {
       isCat: true,
       confidence: 0.91,
       breed: { label: "Bengal", confidence: 0.6 },
+      pose: { label: "sitting", confidence: 0.7 },
+      faceOrientation: { label: "front", confidence: 0.6 },
+      eyeOpenness: { label: "open", confidence: 0.8 },
+      earOrientation: { label: "alert", confidence: 0.6 },
+      tailVisible: true,
+      coat: { color: "orange", pattern: "tabby", confidence: 0.7 },
+      estimatedAgeGroup: { label: "adult", confidence: 0.7 },
+      surroundings: [{ label: "forest", confidence: 0.5 }],
     };
     (analyzeCaptureImage as ReturnType<typeof vi.fn>).mockResolvedValue(fakeCvResult);
 
@@ -119,12 +136,13 @@ describe("analyze-capture worker (real Redis, mocked AI service)", () => {
 
     await waitFor(async () => {
       const updated = await CaptureModel.findById(capture._id);
-      return updated?.status === "analyzed";
+      return updated?.status === "complete";
     });
 
     const updated = await CaptureModel.findById(capture._id);
-    expect(updated?.status).toBe("analyzed");
+    expect(updated?.status).toBe("complete");
     expect(updated?.cvResult).toMatchObject(fakeCvResult);
+    expect(updated?.bondResult?.isNewPawball).toBe(true);
   }, 15_000);
 
   it("marks the capture failed after exhausting retries on a permanent error", async () => {

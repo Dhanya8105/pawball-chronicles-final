@@ -22,7 +22,10 @@ const userSchema = new Schema(
   {
     email: { type: String, required: true, lowercase: true, trim: true },
     passwordHash: { type: String, default: null },
-    googleId: { type: String, default: null },
+    // No `default: null` — a sparse unique index still indexes an explicit
+    // null, so two password-only accounts (googleId null) would collide with
+    // E11000. Leaving it absent lets `sparse` do its job.
+    googleId: { type: String },
     displayName: { type: String, required: true, trim: true },
     avatarUrl: { type: String, default: null },
     lastLoginAt: { type: Date, default: () => new Date() },

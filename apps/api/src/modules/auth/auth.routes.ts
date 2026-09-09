@@ -9,6 +9,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 
+import { config } from "../../config";
 import { asyncHandler } from "../../middleware/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { validateBody } from "../../middleware/validate";
@@ -35,6 +36,9 @@ const credentialLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  // The process-wide in-memory counter would otherwise leak across the test
+  // suite (dozens of register/login calls) and 429 later tests.
+  skip: () => config.isTest,
   message: {
     success: false,
     error: {

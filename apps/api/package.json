@@ -9,8 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
-    "test": "cross-env NODE_ENV=test vitest run",
-    "test:unit": "cross-env NODE_ENV=test vitest run --exclude \"**/auth.test.ts\" --exclude \"**/capture.test.ts\" --exclude \"**/analyzeCapture.worker.test.ts\""
+    "test": "cross-env NODE_ENV=test vitest run --exclude \"**/analyzeCapture.worker.test.ts\"",
+    "test:unit": "cross-env NODE_ENV=test vitest run --exclude \"**/auth.test.ts\" --exclude \"**/capture.test.ts\" --exclude \"**/analyzeCapture.worker.test.ts\"",
+    "test:integration": "cross-env NODE_ENV=test vitest run test/analyzeCapture.worker.test.ts"
   },
   "dependencies": {
     "@pawball/shared-types": "*",
