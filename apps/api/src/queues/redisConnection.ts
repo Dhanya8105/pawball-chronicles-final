@@ -1,8 +1,10 @@
 /**
  * apps/api/src/queues/redisConnection.ts
  *
- * One parser for REDIS_URL -> the connection options object BullMQ wants.
- * Previously duplicated in analyzeCaptureQueue.ts and jobs/analyzeCapture.ts.
+ * Parses a (non-empty) REDIS_URL into the connection options object BullMQ
+ * wants. Callers go through `config/redis.ts`'s `getRedisConnection()`,
+ * which returns null when Redis is not configured — this function is only
+ * reached with a real URL.
  *
  * Two things beyond a bare host/port split:
  *  - `family: 4` — Node/ioredis resolve a bare "localhost" to IPv6 (::1)
@@ -21,8 +23,8 @@ export interface RedisConnection {
   maxRetriesPerRequest: null;
 }
 
-export function parseRedisConnection(url: string | undefined): RedisConnection {
-  const parsed = new URL(url ?? "redis://localhost:6379");
+export function parseRedisConnection(url: string): RedisConnection {
+  const parsed = new URL(url);
   const host = parsed.hostname === "localhost" ? "127.0.0.1" : parsed.hostname;
   return {
     host,

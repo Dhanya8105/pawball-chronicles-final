@@ -45,7 +45,9 @@ export function createApp(): Express {
 
   // API-wide rate limit, separate from auth's stricter credentialLimiter
   // (see modules/auth/auth.routes.ts) — this one's a general abuse
-  // backstop, not a brute-force-specific control.
+  // backstop, not a brute-force-specific control. Uses express-rate-limit's
+  // in-memory store (per-process counters) — no Redis dependency, so it
+  // keeps working whether or not Redis is configured.
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: config.isProduction ? 120 : 1000,

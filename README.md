@@ -78,14 +78,14 @@ fallback.
 ## Running the tests
 
 ```bash
-# apps/api — needs a local Redis (127.0.0.1:6379) for the queue tests;
-# auth.test.ts / capture.test.ts download a mongod via mongodb-memory-server
-# on first run.
+# apps/api — auth.test.ts / capture.test.ts download a mongod via
+# mongodb-memory-server on first run. No Redis needed for `npm test`.
 cd apps/api
-npm test              # 46 tests, 8 files
+npm test              # 42 tests, 7 files — Redis-independent
 npm run test:unit     # Mongo-independent subset
-npm run test:integration   # analyzeCapture.worker.test.ts — real BullMQ + Redis
-                           # + mongo-memory; flaky under Vitest, run on demand
+npm run test:integration   # queueMechanics + analyzeCapture.worker — real
+                           # BullMQ + Redis on 127.0.0.1:6379 (the worker one
+                           # is flaky under Vitest; run on demand)
 
 # services/ai — no API key needed (mock path + pure helpers)
 cd services/ai && python -m pytest -q
@@ -116,7 +116,7 @@ Annotated master list: `.env.example` at the repo root. Per-service copies:
 | Variable | Service | Required? |
 |---|---|---|
 | `MONGO_URI` | apps/api | Yes |
-| `REDIS_URL` | apps/api | Yes (queues) — HTTP still boots without it |
+| `REDIS_URL` | apps/api | **Optional.** Unset/empty → background workers (capture analysis, weekly-life schedule) don't start; all HTTP routes and capture upload still work, captures stay `pending_analysis`. |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | apps/api | Yes |
 | `AI_SERVICE_URL` | apps/api | Yes — defaults to `http://localhost:8000` |
 | `CLOUDINARY_*` | apps/api | Needed for capture upload (no fallback) |

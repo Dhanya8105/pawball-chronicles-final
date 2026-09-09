@@ -12,8 +12,7 @@
  */
 
 import { Queue } from "bullmq";
-import { config } from "../config";
-import { parseRedisConnection } from "./redisConnection";
+import { getRedisConnection } from "../config/redis";
 
 export const WEEKLY_LIFE_QUEUE_NAME = "weekly-life";
 export const WEEKLY_LIFE_JOB_NAME = "weekly-life-tick";
@@ -26,20 +25,31 @@ export interface WeeklyLifeJobData {
   asOf?: string;
 }
 
-export const weeklyLifeQueue = new Queue<WeeklyLifeJobData>(
-  WEEKLY_LIFE_QUEUE_NAME,
-  {
-    connection: parseRedisConnection(config.redisUrl),
-    defaultJobOptions: {
-      attempts: 2,
-      backoff: { type: "exponential", delay: 5000 },
-      removeOnComplete: { age: 30 * 24 * 60 * 60 },
-      removeOnFail: { age: 30 * 24 * 60 * 60 },
-    },
-  }
-);
+const connection = getRedisConnection();
+
+/** null when REDIS_URL is not configured. `runWeeklyLifeTick()` in
+ * jobs/weeklyLifeTick.ts works without it — only the auto-schedule needs a
+ * queue. */
+export const weeklyLifeQueue: Queue<WeeklyLifeJobData> | null = connection
+  ? new Queue<WeeklyLifeJobData>(WEEKLY_LIFE_QUEUE_NAME, {
+      connection,
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 5000 },
+        removeOnComplete: { age: 30 * 24 * 60 * 60 },
+        removeOnFail: { age: 30 * 24 * 60 * 60 },
+      },
+    })
+  : null;
 
 export async function registerWeeklyLifeSchedule(): Promise<void> {
+  if (!weeklyLifeQueue) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[weekly-life] Redis not configured — schedule not registered; run runWeeklyLifeTick() manually"
+    );
+    return;
+  }
   await weeklyLifeQueue.add(
     WEEKLY_LIFE_JOB_NAME,
     {},

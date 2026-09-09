@@ -25,12 +25,11 @@ import { Worker, type Job } from "bullmq";
 import { analyzeCaptureImage, AiServiceError } from "../lib/aiServiceClient";
 import { CaptureModel } from "../modules/capture/capture.model";
 import { runCapturePipeline } from "../modules/capture/capture.pipeline";
-import { config } from "../config";
+import { getRedisConnection } from "../config/redis";
 import {
   ANALYZE_CAPTURE_QUEUE_NAME,
   type AnalyzeCaptureJobData,
 } from "../queues/analyzeCaptureQueue";
-import { parseRedisConnection } from "../queues/redisConnection";
 
 async function processAnalyzeCaptureJob(job: Job<AnalyzeCaptureJobData>): Promise<void> {
   const capture = await CaptureModel.findById(job.data.captureId);
@@ -55,11 +54,15 @@ async function processAnalyzeCaptureJob(job: Job<AnalyzeCaptureJobData>): Promis
   await runCapturePipeline(capture);
 }
 
-export function startAnalyzeCaptureWorker(): Worker<AnalyzeCaptureJobData> {
+/** Returns null when REDIS_URL is not configured (no worker to run). */
+export function startAnalyzeCaptureWorker(): Worker<AnalyzeCaptureJobData> | null {
+  const connection = getRedisConnection();
+  if (!connection) return null;
+
   const worker = new Worker<AnalyzeCaptureJobData>(
     ANALYZE_CAPTURE_QUEUE_NAME,
     processAnalyzeCaptureJob,
-    { connection: parseRedisConnection(config.redisUrl) }
+    { connection }
   );
 
   worker.on("failed", async (job, error) => {

@@ -35,7 +35,14 @@ vi.mock("../src/lib/aiServiceClient", () => ({
 
 import { analyzeCaptureImage } from "../src/lib/aiServiceClient";
 import { startAnalyzeCaptureWorker } from "../src/jobs/analyzeCapture";
-import { analyzeCaptureQueue, ANALYZE_CAPTURE_QUEUE_NAME } from "../src/queues/analyzeCaptureQueue";
+import { analyzeCaptureQueue as maybeQueue, ANALYZE_CAPTURE_QUEUE_NAME } from "../src/queues/analyzeCaptureQueue";
+
+// This suite is `npm run test:integration`, which sets REDIS_URL, so the
+// queue singleton is always non-null here.
+if (!maybeQueue) {
+  throw new Error("analyzeCapture.worker.test.ts requires REDIS_URL (npm run test:integration)");
+}
+const analyzeCaptureQueue = maybeQueue;
 import { CaptureModel } from "../src/modules/capture/capture.model";
 import { UserModel } from "../src/modules/auth/user.model";
 import { connectDb, disconnectDb } from "../src/db/mongoose";
@@ -65,7 +72,9 @@ describe("analyze-capture worker (real Redis, mocked AI service)", () => {
     // One long-lived worker for the whole suite — creating/closing a BullMQ
     // worker per test races (a half-closed worker can hold a job's lock and
     // stall the next test).
-    worker = startAnalyzeCaptureWorker();
+    const w = startAnalyzeCaptureWorker();
+    if (!w) throw new Error("startAnalyzeCaptureWorker returned null (REDIS_URL unset)");
+    worker = w;
     await worker.waitUntilReady();
   }, 60_000);
 

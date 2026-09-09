@@ -20,41 +20,55 @@
 
 import { createApp } from "./app";
 import { config } from "./config";
+import { isRedisEnabled } from "./config/redis";
 import { connectDb } from "./db/mongoose";
 import { startAnalyzeCaptureWorker } from "./jobs/analyzeCapture";
 import { startWeeklyLifeWorker } from "./jobs/weeklyLifeTick";
 import { registerWeeklyLifeSchedule } from "./queues/weeklyLifeQueue";
+
+async function startBackgroundWorkers(): Promise<void> {
+  const analyzeWorker = startAnalyzeCaptureWorker();
+  analyzeWorker?.on("error", (err) => {
+    // eslint-disable-next-line no-console
+    console.error("[analyze-capture-worker] error:", err);
+  });
+
+  const weeklyLifeWorker = startWeeklyLifeWorker();
+  weeklyLifeWorker?.on("error", (err) => {
+    // eslint-disable-next-line no-console
+    console.error("[weekly-life-worker] error:", err);
+  });
+
+  // Registering the repeatable schedule is a Redis write — a transiently
+  // unreachable Redis must not block HTTP startup.
+  try {
+    await registerWeeklyLifeSchedule();
+    // eslint-disable-next-line no-console
+    console.log(
+      "[pawball-api] background workers started + weekly-life schedule registered"
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[pawball-api] weekly-life schedule not registered (Redis unreachable?):",
+      (err as Error).message
+    );
+  }
+}
 
 async function main(): Promise<void> {
   await connectDb();
   // eslint-disable-next-line no-console
   console.log("[pawball-api] connected to MongoDB");
 
-  const worker = startAnalyzeCaptureWorker();
-  worker.on("error", (err) => {
-    // eslint-disable-next-line no-console
-    console.error("[analyze-capture-worker] error:", err);
-  });
-  // eslint-disable-next-line no-console
-  console.log("[pawball-api] analyze-capture worker started");
-
-  const weeklyLifeWorker = startWeeklyLifeWorker();
-  weeklyLifeWorker.on("error", (err) => {
-    // eslint-disable-next-line no-console
-    console.error("[weekly-life-worker] error:", err);
-  });
-  // Registering the repeatable schedule is a Redis write. Don't let a
-  // Redis-unreachable dev box block HTTP startup (same tolerance the README
-  // documents for the capture queue) — log and carry on.
-  try {
-    await registerWeeklyLifeSchedule();
-    // eslint-disable-next-line no-console
-    console.log("[pawball-api] weekly-life worker started + schedule registered");
-  } catch (err) {
+  if (isRedisEnabled()) {
+    await startBackgroundWorkers();
+  } else {
     // eslint-disable-next-line no-console
     console.warn(
-      "[pawball-api] weekly-life schedule not registered (Redis unreachable?):",
-      (err as Error).message
+      "[pawball-api] REDIS_URL not set — background workers disabled. HTTP " +
+        "routes and capture upload still work; captures stay 'pending_analysis' " +
+        "and weekly-life runs only via runWeeklyLifeTick()."
     );
   }
 

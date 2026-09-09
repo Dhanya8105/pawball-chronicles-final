@@ -36,17 +36,30 @@ export async function createCapture(
     capturedAt: input.capturedAt ?? new Date(),
   });
 
-  // Fire-and-forget from this function's perspective: enqueueing is fast
-  // (a Redis write), and a failure to enqueue shouldn't fail the upload
-  // request itself — but it IS awaited so a genuine Redis-unreachable
-  // error surfaces as a clear 5xx to the client now, rather than silently
-  // leaving a capture stuck in pending_analysis forever with no job ever
-  // queued and no error shown anywhere.
-  await analyzeCaptureQueue.add(
-    "analyze",
-    { captureId: capture._id.toString() },
-    { jobId: capture._id.toString() }
-  );
+  // Redis is optional. If it's not configured, or the enqueue fails
+  // (Redis down), the capture is still persisted and returned — it just
+  // stays 'pending_analysis' with no background analysis. The upload
+  // request never fails for a queue problem.
+  if (analyzeCaptureQueue) {
+    try {
+      await analyzeCaptureQueue.add(
+        "analyze",
+        { captureId: capture._id.toString() },
+        { jobId: capture._id.toString() }
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[capture] failed to enqueue analysis for ${capture._id.toString()} (Redis down?):`,
+        (err as Error).message
+      );
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[capture] Redis not configured — capture ${capture._id.toString()} not queued for analysis`
+    );
+  }
 
   return capture;
 }

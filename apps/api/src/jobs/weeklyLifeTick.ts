@@ -12,7 +12,7 @@
  */
 
 import { Worker, type Job } from "bullmq";
-import { config } from "../config";
+import { getRedisConnection } from "../config/redis";
 import {
   generateWeeklyUpdate,
   isoWeekKey,
@@ -21,7 +21,6 @@ import {
 import { computeSeed } from "../lib/seededRandom";
 import { MemoryModel } from "../models/Memory";
 import { PawBallModel } from "../models/PawBall";
-import { parseRedisConnection } from "../queues/redisConnection";
 import {
   WEEKLY_LIFE_QUEUE_NAME,
   type WeeklyLifeJobData,
@@ -92,8 +91,13 @@ export async function runWeeklyLifeTick(
   return { weekKey, processed, created, skipped };
 }
 
-export function startWeeklyLifeWorker(): Worker<WeeklyLifeJobData> {
-  const worker = new Worker<WeeklyLifeJobData>(
+/** Returns null when REDIS_URL is not configured. The tick itself
+ * (`runWeeklyLifeTick`) still works — only the scheduled worker needs Redis. */
+export function startWeeklyLifeWorker(): Worker<WeeklyLifeJobData> | null {
+  const connection = getRedisConnection();
+  if (!connection) return null;
+
+  return new Worker<WeeklyLifeJobData>(
     WEEKLY_LIFE_QUEUE_NAME,
     async (job: Job<WeeklyLifeJobData>) => {
       const asOf = job.data.asOf ? new Date(job.data.asOf) : new Date();
@@ -104,10 +108,8 @@ export function startWeeklyLifeWorker(): Worker<WeeklyLifeJobData> {
       );
       return result;
     },
-    { connection: parseRedisConnection(config.redisUrl) }
+    { connection }
   );
-
-  return worker;
 }
 
 function isDuplicateKeyError(err: unknown): boolean {

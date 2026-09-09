@@ -15,8 +15,7 @@
  */
 
 import { Queue } from "bullmq";
-import { config } from "../config";
-import { parseRedisConnection } from "./redisConnection";
+import { getRedisConnection } from "../config/redis";
 
 export const ANALYZE_CAPTURE_QUEUE_NAME = "analyze-capture";
 
@@ -24,15 +23,17 @@ export interface AnalyzeCaptureJobData {
   captureId: string;
 }
 
-export const analyzeCaptureQueue = new Queue<AnalyzeCaptureJobData>(
-  ANALYZE_CAPTURE_QUEUE_NAME,
-  {
-    connection: parseRedisConnection(config.redisUrl),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 24 * 60 * 60 }, // keep completed jobs 24h for debugging
-      removeOnFail: { age: 7 * 24 * 60 * 60 },
-    },
-  }
-);
+const connection = getRedisConnection();
+
+/** null when REDIS_URL is not configured — callers must guard. */
+export const analyzeCaptureQueue: Queue<AnalyzeCaptureJobData> | null = connection
+  ? new Queue<AnalyzeCaptureJobData>(ANALYZE_CAPTURE_QUEUE_NAME, {
+      connection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 2000 },
+        removeOnComplete: { age: 24 * 60 * 60 }, // keep completed jobs 24h for debugging
+        removeOnFail: { age: 7 * 24 * 60 * 60 },
+      },
+    })
+  : null;

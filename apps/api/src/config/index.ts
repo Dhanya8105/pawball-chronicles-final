@@ -46,7 +46,11 @@ export const config = {
     "MONGO_URI",
     isTest ? "mongodb://127.0.0.1:27017/pawball-test" : undefined
   ),
-  redisUrl: readEnv("REDIS_URL", "redis://localhost:6379"),
+  // Optional. Empty/unset -> Redis is disabled: the API still boots and
+  // serves every HTTP route, but the BullMQ workers don't start (see
+  // src/config/redis.ts + src/index.ts). Set it in .env / docker-compose to
+  // enable background capture analysis and the weekly-life schedule.
+  redisUrl: readEnv("REDIS_URL"),
 
   jwtSecret: requireEnv("JWT_SECRET", isTest ? "test-jwt-secret" : undefined),
   jwtRefreshSecret: requireEnv(
