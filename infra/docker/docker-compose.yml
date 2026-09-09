@@ -32,7 +32,7 @@ services:
       # CV is Gemini Vision. Without a key the /cv/analyze endpoint returns
       # a labelled mock so the stack still runs end-to-end.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}

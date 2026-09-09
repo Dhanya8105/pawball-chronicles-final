@@ -173,7 +173,7 @@ each provider.
 **Current implementation — Gemini Vision.** `POST /cv/analyze`
 (`app/routers/cv.py`) accepts a multipart `image` or `{ image_url }`
 (fetched to bytes), and `app/services/vision_cv.py` sends it to
-`gemini-1.5-flash` (override with `GEMINI_MODEL`) with
+`gemini-3.6-flash` (override with `GEMINI_MODEL`) with
 `response_mime_type: "application/json"` and a strict schema instruction
 that pins every enum (`pose`, `eyeOpenness`, `earOrientation`,
 `estimatedAgeGroup`) and caps `surroundings` at four descriptors. The reply

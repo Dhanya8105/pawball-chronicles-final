@@ -2,7 +2,7 @@
 services/ai/app/services/vision_cv.py
 
 Google Gemini Vision as the CV pipeline. Sends the capture image to the
-Gemini API (`gemini-1.5-flash` by default, override with `GEMINI_MODEL`)
+Gemini API (`gemini-3.6-flash` by default, override with `GEMINI_MODEL`)
 with a strict JSON-only instruction, then maps the reply onto
 `CvAnalysisResult`. No local model weights, no PyTorch.
 
@@ -12,6 +12,7 @@ pipeline still runs end-to-end in local dev without a key. Get a free key
 at https://aistudio.google.com/app/apikey.
 """
 
+import asyncio
 import json
 import os
 from typing import Any
@@ -23,7 +24,7 @@ from app.schemas.cv_result import (
     SurroundingLabel,
 )
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 SYSTEM_PROMPT = """You are a computer vision API for a cat collection game.
 Analyze the image and return ONLY valid JSON matching this schema:
@@ -54,12 +55,20 @@ async def analyze_image_bytes(image_bytes: bytes, media_type: str) -> CvAnalysis
     return _to_result(raw)
 
 
+# Current flash models spend a few hundred tokens on internal reasoning that
+# also counts against max_output_tokens, and thinking can't be disabled on
+# them — so the budget has to cover reasoning + the ~350-token JSON.
+_MAX_OUTPUT_TOKENS = 4096
+_RETRIES = 3
+
+
 async def _call_gemini(image_bytes: bytes, media_type: str) -> dict[str, Any]:
     from google import genai
+    from google.genai import errors as genai_errors
     from google.genai import types
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    response = await client.aio.models.generate_content(
+    request = dict(
         model=MODEL,
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=media_type),
@@ -68,15 +77,40 @@ async def _call_gemini(image_bytes: bytes, media_type: str) -> dict[str, Any]:
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             response_mime_type="application/json",
-            max_output_tokens=1024,
+            max_output_tokens=_MAX_OUTPUT_TOKENS,
             temperature=0.0,
         ),
     )
 
+    last_exc: Exception | None = None
+    for attempt in range(_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(**request)
+            break
+        except genai_errors.ServerError as exc:  # 5xx — transient overload
+            last_exc = exc
+            if attempt == _RETRIES - 1:
+                raise
+            await asyncio.sleep(1.5 * (attempt + 1))
+    else:  # pragma: no cover
+        raise last_exc  # type: ignore[misc]
+
+    finish = (
+        str(response.candidates[0].finish_reason)
+        if response.candidates
+        else "no candidates"
+    )
     text = response.text
     if not text:
-        feedback = getattr(response, "prompt_feedback", None)
-        raise RuntimeError(f"Gemini returned no text (prompt_feedback={feedback})")
+        raise RuntimeError(
+            f"Gemini returned no text (finish_reason={finish}, "
+            f"prompt_feedback={getattr(response, 'prompt_feedback', None)})"
+        )
+    if "MAX_TOKENS" in finish:
+        raise RuntimeError(
+            f"Gemini response was truncated (finish_reason={finish}); "
+            f"raise _MAX_OUTPUT_TOKENS."
+        )
     return _extract_json(text)
 
 
