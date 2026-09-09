@@ -1,0 +1,23 @@
+# Dependencies / build output — reinstalled and rebuilt inside the image
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+
+# Python (services/ai)
+**/__pycache__
+*.pyc
+**/*.pyc
+**/.venv
+**/.pytest_cache
+
+# Secrets — the platform injects env vars at runtime
+.env
+**/.env
+.env.local
+**/.env.local
+
+# VCS
+.git
