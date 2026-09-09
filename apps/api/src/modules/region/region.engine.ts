@@ -47,6 +47,21 @@ export function locationHash(lat: number, lng: number): string {
   return `${lat.toFixed(2)}:${lng.toFixed(2)}`;
 }
 
+/**
+ * Fuse an adjective onto a noun whose first syllable is lower-case
+ * ("Moss" + "shade Thicket"). Drops the noun's leading letter when it
+ * repeats the adjective's trailing letter so the seam never doubles up
+ * ("Moss" + "shade" -> "Mosshade", not "Mossshade"; "Pearl" + "light" ->
+ * "Pearlight"). Pure string op — it does not touch the RNG, so seeded
+ * output for non-colliding pairs is unchanged.
+ */
+export function fuseName(adjective: string, noun: string): string {
+  if (adjective.slice(-1).toLowerCase() === noun.charAt(0).toLowerCase()) {
+    return adjective + noun.slice(1);
+  }
+  return adjective + noun;
+}
+
 export function generateRegionIdentity(
   ownerId: string,
   cell: string,
@@ -54,7 +69,7 @@ export function generateRegionIdentity(
 ): { fantasyName: string; description: string } {
   const rng = makeRng(computeSeed([ownerId, cell, biome]));
   const pool = REGION_NAME_POOLS[biome];
-  const fantasyName = `${pick(rng, pool.adjectives)}${pick(rng, pool.nouns)}`;
+  const fantasyName = fuseName(pick(rng, pool.adjectives), pick(rng, pool.nouns));
   const description = pick(rng, BIOME_DESCRIPTION_TEMPLATES[biome]);
   return { fantasyName, description };
 }
