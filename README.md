@@ -45,7 +45,7 @@ uvicorn app.main:app --reload --host 0.0.0.0
 `127.0.0.1` bind can be missed by Node's `localhost` → IPv6 resolution.)
 
 **CV is Google Gemini Vision** — `POST /cv/analyze` sends the image to
-`gemini-3.6-flash` (override with `GEMINI_MODEL`) and returns a structured
+`gemini-flash-lite-latest` (override with `GEMINI_MODEL`) and returns a structured
 `CvAnalysisResult`. **No model weights to download.** Get a free key at
 <https://aistudio.google.com/app/apikey>. Without a `GEMINI_API_KEY` the
 endpoint returns a clearly-labelled mock (`"mock": true`, all confidences

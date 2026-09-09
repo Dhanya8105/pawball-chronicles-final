@@ -2,7 +2,7 @@
 services/ai/app/services/vision_cv.py
 
 Google Gemini Vision as the CV pipeline. Sends the capture image to the
-Gemini API (`gemini-3.6-flash` by default, override with `GEMINI_MODEL`)
+Gemini API (`gemini-flash-lite-latest` by default, override with `GEMINI_MODEL`)
 with a strict JSON-only instruction, then maps the reply onto
 `CvAnalysisResult`. No local model weights, no PyTorch.
 
@@ -24,7 +24,7 @@ from app.schemas.cv_result import (
     SurroundingLabel,
 )
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 
 SYSTEM_PROMPT = """You are a computer vision API for a cat collection game.
 Analyze the image and return ONLY valid JSON matching this schema:
@@ -36,7 +36,11 @@ pose label must be one of: sitting|sleeping|running|loaf|standing|unknown
 eyeOpenness label must be one of: open|half|closed
 earOrientation label must be one of: forward|alert|relaxed|flat
 estimatedAgeGroup label must be one of: kitten|adult|senior
-surroundings: up to 4 environment descriptors visible in the image.
+coat.color MUST be the single closest match from this list, nothing else:
+  orange|black|white|grey|brown|cream|calico|tabby|black-and-white|tortoiseshell|golden
+surroundings: up to 4 labels, and EVERY label MUST come from this list, nothing else:
+  temple|shrine|garden|park|forest|beach|coast|alley|street|market|indoor|rooftop|construction|night|rain|sunset|snow
+Omit any surroundings label that does not clearly apply; do not invent new labels.
 If no cat is present return isCat:false with confidence and nulls elsewhere.
 No markdown. No explanation. Raw JSON only."""
 
@@ -67,7 +71,12 @@ async def _call_gemini(image_bytes: bytes, media_type: str) -> dict[str, Any]:
     from google.genai import errors as genai_errors
     from google.genai import types
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    # A hard HTTP timeout so a stalled call raises (and the retry below can
+    # recover) instead of hanging the worker.
+    client = genai.Client(
+        api_key=os.environ["GEMINI_API_KEY"],
+        http_options=types.HttpOptions(timeout=45_000),
+    )
     request = dict(
         model=MODEL,
         contents=[
@@ -82,12 +91,18 @@ async def _call_gemini(image_bytes: bytes, media_type: str) -> dict[str, Any]:
         ),
     )
 
+    import httpx
+
+    # Transient: 5xx overload ("model is experiencing high demand") and
+    # request timeouts. 4xx (ClientError) is not retried — it surfaces.
+    transient = (genai_errors.ServerError, httpx.TimeoutException, httpx.TransportError)
+
     last_exc: Exception | None = None
     for attempt in range(_RETRIES):
         try:
             response = await client.aio.models.generate_content(**request)
             break
-        except genai_errors.ServerError as exc:  # 5xx — transient overload
+        except transient as exc:
             last_exc = exc
             if attempt == _RETRIES - 1:
                 raise

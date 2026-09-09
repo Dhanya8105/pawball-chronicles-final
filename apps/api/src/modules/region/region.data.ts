@@ -22,29 +22,43 @@ export const BIOMES: readonly Biome[] = [
 ];
 
 /**
- * CV surroundings label -> biome. The CV service returns labels sorted by
- * confidence (services/ai/app/pipelines/cv/surroundings.py), so the first
- * label in the list that appears here wins.
+ * CV surroundings label -> biome. The CV service (Gemini Vision) is
+ * constrained to a fixed 17-label vocabulary — see SYSTEM_PROMPT in
+ * services/ai/app/services/vision_cv.py — and every one of those labels is
+ * mapped here. Labels are confidence-sorted, so the first that appears here
+ * wins. The extra legacy keys (trees, water, marketplace, ...) are kept so
+ * older stored data still resolves.
  */
 const SURROUNDING_TO_BIOME: Record<string, Biome> = {
-  forest: "woodland",
-  trees: "woodland",
-  beach: "coast",
-  water: "coast",
+  // --- CV vocabulary (vision_cv.py SYSTEM_PROMPT) ---
   temple: "sanctum",
+  shrine: "sanctum",
+  garden: "grove",
+  park: "grove",
+  forest: "woodland",
+  beach: "coast",
+  coast: "coast",
+  alley: "citadel",
   street: "citadel",
+  market: "citadel",
+  indoor: "citadel",
+  rooftop: "citadel",
+  construction: "citadel",
+  night: "shadowfen",
+  rain: "mistlands",
+  sunset: "dawnreach",
+  snow: "highland",
+  // --- legacy labels (pre-Gemini) ---
+  trees: "woodland",
+  water: "coast",
   "urban alley": "citadel",
   marketplace: "citadel",
   apartment: "citadel",
   cafe: "citadel",
   village: "citadel",
   mountain: "highland",
-  garden: "grove",
   flowers: "grove",
-  night: "shadowfen",
   fog: "mistlands",
-  rain: "mistlands",
-  sunset: "dawnreach",
   morning: "dawnreach",
 };
 

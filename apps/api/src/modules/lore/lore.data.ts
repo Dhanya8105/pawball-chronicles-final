@@ -42,21 +42,32 @@ export const BREED_RARITY_WEIGHT: Record<string, number> = {
 };
 
 export const SURROUNDING_RARITY_WEIGHT: Record<string, number> = {
+  // --- CV vocabulary (vision_cv.py SYSTEM_PROMPT) ---
   temple: 3,
-  mountain: 3,
+  shrine: 3,
+  snow: 2,
   forest: 2,
   beach: 2,
-  water: 2,
+  coast: 2,
   night: 2,
-  fog: 2,
   rain: 2,
   sunset: 1,
   garden: 1,
+  park: 1,
+  rooftop: 1,
+  street: 0,
+  alley: 0,
+  market: 0,
+  indoor: 0,
+  construction: 0,
+  // --- legacy labels (pre-Gemini) ---
+  mountain: 3,
+  water: 2,
+  fog: 2,
   village: 1,
   flowers: 1,
   trees: 1,
   morning: 1,
-  street: 0,
   apartment: 0,
   cafe: 0,
   marketplace: 0,
@@ -110,24 +121,35 @@ export const BREED_GROUP: Record<string, BreedGroup> = {
 };
 
 export const SURROUNDING_GROUP: Record<string, SurroundingGroup> = {
+  // --- CV vocabulary (vision_cv.py SYSTEM_PROMPT) ---
   forest: "wild",
+  beach: "wild",
+  coast: "wild",
+  park: "wild",
+  snow: "wild",
+  street: "urban",
+  alley: "urban",
+  market: "urban",
+  indoor: "urban",
+  rooftop: "urban",
+  construction: "urban",
+  temple: "sacred",
+  shrine: "sacred",
+  garden: "sacred",
+  night: "liminal",
+  rain: "liminal",
+  sunset: "liminal",
+  // --- legacy labels (pre-Gemini) ---
   trees: "wild",
   mountain: "wild",
   water: "wild",
-  beach: "wild",
-  street: "urban",
   "urban alley": "urban",
   marketplace: "urban",
   apartment: "urban",
   cafe: "urban",
   village: "urban",
-  temple: "sacred",
-  garden: "sacred",
   flowers: "sacred",
-  night: "liminal",
   fog: "liminal",
-  rain: "liminal",
-  sunset: "liminal",
   morning: "liminal",
 };
 
@@ -200,14 +222,21 @@ export const STAT_SPREAD = 15;
 // Element — deterministic lookup: coat colour x time of day
 // ---------------------------------------------------------------------------
 
+// Keyed by the fixed coat.color vocabulary the CV is constrained to (see
+// vision_cv.py SYSTEM_PROMPT): orange|black|white|grey|brown|cream|calico|
+// tabby|black-and-white|tortoiseshell|golden.
 export const ELEMENT_TABLE: Record<string, Record<TimeOfDay, Element>> = {
   orange: { dawn: "Solar", day: "Solar", dusk: "Ember", night: "Ember" },
   black: { dawn: "Storm", day: "Storm", dusk: "Shadow", night: "Shadow" },
   white: { dawn: "Frost", day: "Frost", dusk: "Moon", night: "Moon" },
   grey: { dawn: "Frost", day: "Storm", dusk: "Storm", night: "Moon" },
   brown: { dawn: "Verdant", day: "Verdant", dusk: "Ember", night: "Shadow" },
-  calico: { dawn: "Solar", day: "Verdant", dusk: "Tide", night: "Moon" },
   cream: { dawn: "Solar", day: "Solar", dusk: "Tide", night: "Moon" },
+  calico: { dawn: "Solar", day: "Verdant", dusk: "Tide", night: "Moon" },
+  tabby: { dawn: "Verdant", day: "Verdant", dusk: "Ember", night: "Shadow" },
+  "black-and-white": { dawn: "Storm", day: "Storm", dusk: "Moon", night: "Moon" },
+  tortoiseshell: { dawn: "Ember", day: "Verdant", dusk: "Tide", night: "Shadow" },
+  golden: { dawn: "Solar", day: "Solar", dusk: "Ember", night: "Ember" },
 };
 
 export const DEFAULT_ELEMENT_COLOR_KEY = "grey";
