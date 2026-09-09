@@ -12,9 +12,15 @@ import type {
   CollectionStats,
   Rarity,
 } from "@pawball/shared-types";
-import type { FilterQuery } from "mongoose";
+import { Types, type FilterQuery } from "mongoose";
 import { PawBallModel, type PawBallDocument } from "../../models/PawBall";
 import { toPawBallSummary } from "../pawball/pawball.serialize";
+
+/** `aggregate()` does NOT auto-cast strings to ObjectId the way `find()`
+ * does, so every `$match` on an id field must pass a real ObjectId. */
+function oid(id: string): Types.ObjectId {
+  return new Types.ObjectId(id);
+}
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 const BOND_LEVELS: BondLevel[] = [
@@ -49,7 +55,7 @@ export interface CollectionQueryInput {
 }
 
 function buildFilter(input: CollectionQueryInput): FilterQuery<PawBallDocument> {
-  const filter: FilterQuery<PawBallDocument> = { ownerId: input.ownerId };
+  const filter: FilterQuery<PawBallDocument> = { ownerId: oid(input.ownerId) };
 
   if (input.rarity && RARITIES.includes(input.rarity as Rarity)) {
     filter["identity.rarity"] = input.rarity;
@@ -60,10 +66,10 @@ function buildFilter(input: CollectionQueryInput): FilterQuery<PawBallDocument> 
   if (input.bondLevel && BOND_LEVELS.includes(input.bondLevel as BondLevel)) {
     filter["bond.level"] = input.bondLevel;
   }
-  if (input.regionId) {
+  if (input.regionId && Types.ObjectId.isValid(input.regionId)) {
     filter.$or = [
-      { "homeRegion.regionId": input.regionId },
-      { locationsVisited: input.regionId },
+      { "homeRegion.regionId": oid(input.regionId) },
+      { locationsVisited: oid(input.regionId) },
     ];
   }
   if (input.q && input.q.trim()) {
@@ -143,20 +149,20 @@ export async function collectionStats(ownerId: string): Promise<CollectionStats>
   const [byRarityRows, byBondRows, byBreedRows, byRegionRows, total] =
     await Promise.all([
       PawBallModel.aggregate([
-        { $match: { ownerId } },
+        { $match: { ownerId: oid(ownerId) } },
         { $group: { _id: "$identity.rarity", count: { $sum: 1 } } },
       ]),
       PawBallModel.aggregate([
-        { $match: { ownerId } },
+        { $match: { ownerId: oid(ownerId) } },
         { $group: { _id: "$bond.level", count: { $sum: 1 } } },
       ]),
       PawBallModel.aggregate([
-        { $match: { ownerId } },
+        { $match: { ownerId: oid(ownerId) } },
         { $group: { _id: "$visualProfile.breed", count: { $sum: 1 } } },
         { $sort: { count: -1, _id: 1 } },
       ]),
       PawBallModel.aggregate([
-        { $match: { ownerId } },
+        { $match: { ownerId: oid(ownerId) } },
         { $group: { _id: "$homeRegion.name", count: { $sum: 1 } } },
         { $sort: { count: -1, _id: 1 } },
       ]),

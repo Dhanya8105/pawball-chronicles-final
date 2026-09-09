@@ -256,6 +256,12 @@ export interface CaptureResponse {
   status: CaptureStatus;
 }
 
+export interface CaptureBondResult {
+  pawballId: string;
+  isNewPawball: boolean;
+  similarityScore?: number | null;
+}
+
 export interface CaptureRecord {
   _id: string;
   ownerId: string;
@@ -264,6 +270,7 @@ export interface CaptureRecord {
   location: { lat: number; lng: number };
   capturedAt: string;
   cvResult: CvAnalysisResult | null;
+  bondResult: CaptureBondResult | null;
   generatedArtUrl: string | null;
   error: { stage: string; message: string } | null;
   createdAt: string;

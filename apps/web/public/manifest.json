@@ -3,10 +3,12 @@
   "short_name": "PawBall",
   "description": "Every Cat Has A Legend.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#14101c",
-  "theme_color": "#14101c",
+  "background_color": "#0d0a1a",
+  "theme_color": "#0d0a1a",
   "orientation": "portrait",
+  "categories": ["games", "lifestyle"],
   "icons": [
     {
       "src": "/icons/icon-192.png",

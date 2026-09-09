@@ -2,8 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+}
+
 html,
 body {
-  background-color: theme("colors.pawball.ink");
-  color: white;
+  background-color: #0d0a1a;
+  color: #f0ebff;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  /* A faint aurora behind the mobile column so the page never reads flat. */
+  background-image:
+    radial-gradient(60% 40% at 15% 0%, rgba(167, 139, 250, 0.14), transparent 70%),
+    radial-gradient(50% 35% at 100% 10%, rgba(93, 232, 192, 0.08), transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 700;
+}
+
+/* Fantasy names + power numbers: heaviest weight, tight tracking. */
+.fantasy-name {
+  font-weight: 900;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.power-number {
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Leaflet, themed dark. */
+.leaflet-container {
+  background: #14101f !important;
+  font-family: inherit;
+}
+.leaflet-container .leaflet-tile {
+  filter: brightness(0.62) saturate(0.75) hue-rotate(190deg) invert(1) contrast(0.92);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #221d38;
+  color: #f0ebff;
+  border: 1px solid rgba(180, 150, 255, 0.18);
+}
+.leaflet-popup-content {
+  margin: 12px;
+}
+.leaflet-bar a {
+  background: #1c1630;
+  color: #f0ebff;
+  border-color: rgba(180, 150, 255, 0.18);
 }
