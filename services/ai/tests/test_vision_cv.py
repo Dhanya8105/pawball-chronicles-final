@@ -1,10 +1,10 @@
 """
-Tests for the Claude Vision CV service (app/services/vision_cv.py).
+Tests for the Gemini Vision CV service (app/services/vision_cv.py).
 
-None of these need an ANTHROPIC_API_KEY: they cover the no-key mock path
-and the pure JSON-parsing / normalisation helpers. The one real network
-call (`_call_claude`) is exercised via the live curl check in the README,
-not here.
+None of these need a GEMINI_API_KEY: they cover the no-key mock path and
+the pure JSON-parsing / normalisation helpers. The one real network call
+(`_call_gemini`) is exercised via the live curl check in the README, not
+here.
 """
 
 import asyncio
@@ -15,10 +15,8 @@ from app.services import vision_cv
 
 
 def test_no_api_key_returns_labelled_mock(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    result = asyncio.run(
-        vision_cv.analyze_image_source({"type": "url", "url": "http://x/y.jpg"})
-    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    result = asyncio.run(vision_cv.analyze_image_bytes(b"\xff\xd8\xff", "image/jpeg"))
     assert isinstance(result, CvAnalysisResult)
     assert result.mock is True
     assert result.is_cat is True

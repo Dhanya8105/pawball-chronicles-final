@@ -48,7 +48,7 @@ export interface CvAnalysisResult {
   estimatedAgeGroup: ConfidenceValue<AgeGroup>;
   surroundings: { label: string; confidence: number }[];
   /** true when services/ai returned the no-API-key placeholder rather than
-   * a real Claude Vision analysis. */
+   * a real Gemini Vision analysis. */
   mock?: boolean;
 }
 

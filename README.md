@@ -31,22 +31,23 @@ Starts the Express API, the BullMQ analyze-capture worker, and the weekly-life
 worker in one process. Needs Mongo up (step 1); Redis is used by the queues
 (without it the HTTP server still boots — capture enqueues just fail loudly).
 
-### 3. AI service — Claude Vision CV → http://localhost:8000
+### 3. AI service — Gemini Vision CV → http://localhost:8000
 
 ```bash
 cd services/ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # add ANTHROPIC_API_KEY — optional (see below)
+cp .env.example .env          # add GEMINI_API_KEY — optional (see below)
 uvicorn app.main:app --reload
 ```
 
-**CV is Claude Vision now** — `POST /cv/analyze` sends the image to the
-Anthropic Messages API (`claude-sonnet-4-6`, vision) and returns a structured
-`CvAnalysisResult`. **No model weights to download.** Without an
-`ANTHROPIC_API_KEY` the endpoint returns a clearly-labelled mock
-(`"mock": true`, all confidences `0.0`, breed `"Domestic Shorthair"`) so the
-capture → bond → lore pipeline still runs end-to-end in local dev.
+**CV is Google Gemini Vision** — `POST /cv/analyze` sends the image to
+`gemini-1.5-flash` (override with `GEMINI_MODEL`) and returns a structured
+`CvAnalysisResult`. **No model weights to download.** Get a free key at
+<https://aistudio.google.com/app/apikey>. Without a `GEMINI_API_KEY` the
+endpoint returns a clearly-labelled mock (`"mock": true`, all confidences
+`0.0`, breed `"Domestic Shorthair"`) so the capture → bond → lore pipeline
+still runs end-to-end in local dev.
 
 ### 4. Web → http://localhost:3000
 
@@ -61,7 +62,7 @@ npm install && npm run dev
 ## What works
 
 - **Auth** — register / login / JWT access + refresh (rotation + revocation)
-- **Cat capture → Claude Vision CV → deterministic RPG identity** — upload a
+- **Cat capture → Gemini Vision CV → deterministic RPG identity** — upload a
   photo, poll the pipeline, get a collectible card. Region → Bond → Aura →
   Lore all run in `apps/api` as rule tables + a seeded RNG (no LLM), so the
   same encounter always produces the same legend.
@@ -78,7 +79,7 @@ npm install && npm run dev
 
 | Variable | Used by | Without it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `services/ai` | `POST /cv/analyze` returns a labelled **mock** `CvAnalysisResult` (`mock: true`). The pipeline runs; every capture just becomes a "Domestic Shorthair" with 0-confidence readings. |
+| `GEMINI_API_KEY` | `services/ai` | `POST /cv/analyze` returns a labelled **mock** `CvAnalysisResult` (`mock: true`). The pipeline runs; every capture just becomes a "Domestic Shorthair" with 0-confidence readings. Free key: <https://aistudio.google.com/app/apikey>. |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | `apps/api` | The capture upload step returns **`503 CAPTURE_PIPELINE_FAILED`** ("Image storage is not configured"). There is **no local-disk fallback** — capture needs Cloudinary. |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | `apps/api` | `POST /auth/google` returns `503`. Email/password auth is unaffected. |
 
@@ -106,7 +107,7 @@ cd apps/web && npx tsc --noEmit && npm run build
 ## Quick start (Docker, full stack)
 
 ```bash
-cp .env.example .env          # fill ANTHROPIC_API_KEY + CLOUDINARY_* + JWT secrets
+cp .env.example .env          # fill GEMINI_API_KEY + CLOUDINARY_* + JWT secrets
 cd infra/docker
 docker compose build
 docker compose up
@@ -127,7 +128,7 @@ Annotated master list: `.env.example` at the repo root. Per-service copies:
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | apps/api | Yes |
 | `AI_SERVICE_URL` | apps/api | Yes — defaults to `http://localhost:8000` |
 | `CLOUDINARY_*` | apps/api | Needed for capture upload (no fallback) |
-| `ANTHROPIC_API_KEY` | services/ai | Optional — mock CV without it |
+| `GEMINI_API_KEY` | services/ai | Optional — mock CV without it |
 | `NEXT_PUBLIC_API_URL` | apps/web | Yes — defaults to `http://localhost:4000/api/v1` |
 
 ## Repo layout
@@ -138,7 +139,7 @@ apps/
   api/      Express + TS — auth, capture pipeline, Region/Bond/Aura/Lore engines,
             read APIs (pawballs / collection / map), BullMQ workers
 services/
-  ai/       FastAPI — CV via Claude Vision (app/services/vision_cv.py),
+  ai/       FastAPI — CV via Gemini Vision (app/services/vision_cv.py),
             swappable image-generation provider (placeholder by default)
 packages/
   shared-types/   the API contract, consumed by both apps
@@ -154,7 +155,7 @@ docs/
   are rule tables + a seeded mulberry32 RNG in `apps/api/src/modules/`. The
   seed is `sha256(userId | capturedAt | breed | coatColor)`, so a capture is
   fully reproducible and unit-testable. The only model call in the system is
-  `services/ai`'s Claude Vision CV.
+  `services/ai`'s Gemini Vision CV.
 - **Bond re-identification** currently matches on owner + breed + coat within
   ~250m of a prior sighting (documented interim for a future CLIP-embedding +
   FAISS service).

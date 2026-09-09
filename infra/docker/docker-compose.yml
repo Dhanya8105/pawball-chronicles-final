@@ -29,9 +29,10 @@ services:
     environment:
       - IMAGE_GEN_PROVIDER=placeholder
       - IMAGE_GEN_FALLBACK_CHAIN=placeholder
-      # CV is Claude Vision now. Without a key the /cv/analyze endpoint
-      # returns a labelled mock so the stack still runs end-to-end.
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # CV is Gemini Vision. Without a key the /cv/analyze endpoint returns
+      # a labelled mock so the stack still runs end-to-end.
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}

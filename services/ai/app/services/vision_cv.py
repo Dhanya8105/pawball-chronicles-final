@@ -1,17 +1,17 @@
 """
 services/ai/app/services/vision_cv.py
 
-Claude Vision as the CV pipeline. Sends the capture image to the Anthropic
-Messages API (claude-sonnet-4-6, vision) with a strict JSON-only system
-prompt, then maps the reply onto `CvAnalysisResult`. No local model
-weights, no PyTorch — the whole "download_models.sh" step is gone.
+Google Gemini Vision as the CV pipeline. Sends the capture image to the
+Gemini API (`gemini-1.5-flash` by default, override with `GEMINI_MODEL`)
+with a strict JSON-only instruction, then maps the reply onto
+`CvAnalysisResult`. No local model weights, no PyTorch.
 
-If `ANTHROPIC_API_KEY` is unset the service returns a clearly-labelled mock
+If `GEMINI_API_KEY` is unset the service returns a clearly-labelled mock
 result (`mock=True`, `confidence=0.0`) so the capture → bond → lore
-pipeline still runs end-to-end in local dev without a key.
+pipeline still runs end-to-end in local dev without a key. Get a free key
+at https://aistudio.google.com/app/apikey.
 """
 
-import base64
 import json
 import os
 from typing import Any
@@ -23,7 +23,7 @@ from app.schemas.cv_result import (
     SurroundingLabel,
 )
 
-MODEL = "claude-sonnet-4-6"
+MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
 SYSTEM_PROMPT = """You are a computer vision API for a cat collection game.
 Analyze the image and return ONLY valid JSON matching this schema:
@@ -41,57 +41,48 @@ No markdown. No explanation. Raw JSON only."""
 
 
 def has_api_key() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY"))
+    return bool(os.getenv("GEMINI_API_KEY"))
 
 
-def image_source_from_bytes(image_bytes: bytes, media_type: str) -> dict:
-    return {
-        "type": "base64",
-        "media_type": media_type,
-        "data": base64.standard_b64encode(image_bytes).decode("utf-8"),
-    }
-
-
-def image_source_from_url(url: str) -> dict:
-    return {"type": "url", "url": url}
-
-
-async def analyze_image_source(image_source: dict) -> CvAnalysisResult:
-    """image_source is an Anthropic image content-block `source` dict —
-    either {type:"base64",media_type,data} or {type:"url",url}."""
+async def analyze_image_bytes(image_bytes: bytes, media_type: str) -> CvAnalysisResult:
+    """image_bytes is the raw image; media_type is its MIME type
+    (e.g. 'image/jpeg'). The caller (routers/cv.py) reads a multipart file
+    or fetches an image_url into bytes before calling this."""
     if not has_api_key():
         return mock_result()
-    raw = await _call_claude(image_source)
+    raw = await _call_gemini(image_bytes, media_type)
     return _to_result(raw)
 
 
-async def _call_claude(image_source: dict) -> dict[str, Any]:
-    import anthropic
+async def _call_gemini(image_bytes: bytes, media_type: str) -> dict[str, Any]:
+    from google import genai
+    from google.genai import types
 
-    client = anthropic.AsyncAnthropic()  # reads ANTHROPIC_API_KEY from env
-    message = await client.messages.create(
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    response = await client.aio.models.generate_content(
         model=MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": image_source},
-                    {"type": "text", "text": "Analyze this image."},
-                ],
-            }
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type=media_type),
+            "Analyze this image.",
         ],
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            max_output_tokens=1024,
+            temperature=0.0,
+        ),
     )
-    text = "".join(
-        block.text for block in message.content if block.type == "text"
-    ).strip()
+
+    text = response.text
+    if not text:
+        feedback = getattr(response, "prompt_feedback", None)
+        raise RuntimeError(f"Gemini returned no text (prompt_feedback={feedback})")
     return _extract_json(text)
 
 
 def _extract_json(text: str) -> dict[str, Any]:
-    """Claude is told 'raw JSON only', but strip a stray ```json fence or
-    surrounding prose defensively before parsing."""
+    """Gemini is asked for `application/json`, but strip a stray ```json
+    fence or surrounding prose defensively before parsing."""
     t = text.strip()
     if t.startswith("```"):
         t = t[3:]
@@ -155,7 +146,7 @@ def _to_result(raw: dict[str, Any]) -> CvAnalysisResult:
 
 
 def mock_result() -> CvAnalysisResult:
-    """Labelled placeholder returned when ANTHROPIC_API_KEY is unset. Every
+    """Labelled placeholder returned when GEMINI_API_KEY is unset. Every
     confidence is 0.0 so nothing downstream mistakes it for a real reading;
     `mock=True` makes it explicit on the wire."""
     return CvAnalysisResult(

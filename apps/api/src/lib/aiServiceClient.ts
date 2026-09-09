@@ -7,10 +7,10 @@
  * to camelCase here so the rest of apps/api never has to think about which
  * service's naming convention it's looking at).
  *
- * As of the Claude Vision milestone, services/ai's POST /cv/analyze accepts
+ * As of the Gemini Vision milestone, services/ai's POST /cv/analyze accepts
  * `{ image_url }` (what we send here) or a multipart image, and never
  * returns a 503 for "models not downloaded" — that failure mode is gone.
- * When services/ai has no ANTHROPIC_API_KEY it returns a real 200 with
+ * When services/ai has no GEMINI_API_KEY it returns a real 200 with
  * `mock: true` set.
  */
 
@@ -44,8 +44,8 @@ export interface CvAnalysisResult {
   coat: CvCoatResult;
   estimatedAgeGroup: CvConfidenceValue;
   surroundings: CvSurroundingLabel[];
-  /** true when services/ai had no ANTHROPIC_API_KEY and returned the
-   * labelled placeholder instead of a real Claude Vision analysis. */
+  /** true when services/ai had no GEMINI_API_KEY and returned the
+   * labelled placeholder instead of a real Gemini Vision analysis. */
   mock?: boolean;
 }
 

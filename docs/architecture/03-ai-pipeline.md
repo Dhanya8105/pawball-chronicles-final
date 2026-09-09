@@ -170,21 +170,27 @@ each provider.
 
 ## 4. CV pipeline internals
 
-**Current implementation — Claude Vision.** `POST /cv/analyze`
-(`app/routers/cv.py`) accepts a multipart `image` or `{ image_url }`, and
-`app/services/vision_cv.py` sends it to the Anthropic Messages API
-(`claude-sonnet-4-6`, vision) with a strict JSON-only system prompt that
-pins every enum (`pose`, `eyeOpenness`, `earOrientation`,
+**Current implementation — Gemini Vision.** `POST /cv/analyze`
+(`app/routers/cv.py`) accepts a multipart `image` or `{ image_url }`
+(fetched to bytes), and `app/services/vision_cv.py` sends it to
+`gemini-1.5-flash` (override with `GEMINI_MODEL`) with
+`response_mime_type: "application/json"` and a strict schema instruction
+that pins every enum (`pose`, `eyeOpenness`, `earOrientation`,
 `estimatedAgeGroup`) and caps `surroundings` at four descriptors. The reply
 is parsed and normalised onto `CvAnalysisResult` (snake_case Pydantic,
 matching `packages/shared-types`). There are **no local model weights** and
-no `scripts/download_models.sh`. When `ANTHROPIC_API_KEY` is unset the
-service returns a labelled mock (`mock: true`, all confidences `0.0`) so the
+no `scripts/download_models.sh`. When `GEMINI_API_KEY` is unset the service
+returns a labelled mock (`mock: true`, all confidences `0.0`) so the
 downstream pipeline still runs in local dev. Tests: `tests/test_vision_cv.py`
 covers the mock path and the JSON parse/normalise helpers.
 
+The provider is a single localised concern — `_call_gemini` in
+`vision_cv.py`. An earlier iteration used the Anthropic Messages API
+(`claude-sonnet-4-6`); the swap to Gemini touched only that function, the
+API key name, and `requirements.txt`.
+
 The confidence-honesty rule still holds — for a real reading each field
-carries Claude's own estimate; for a non-cat the normaliser fills
+carries the model's own estimate; for a non-cat the normaliser fills
 `label:"unknown", confidence:0.0` rather than inventing a number.
 
 ### Historical: the Milestone-3 YOLOv8 + CLIP pipeline (removed)

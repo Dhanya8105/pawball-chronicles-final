@@ -4,8 +4,8 @@ services/ai/app/schemas/cv_result.py
 Matches docs/architecture/03-ai-pipeline.md's /cv/analyze contract and the
 `CvAnalysisResult` type in packages/shared-types. The "never invent
 confidence values" rule still holds: for a real cat reading every
-model-backed field carries Claude Vision's own confidence estimate; when no
-cat is present the orchestrator fills `label:"unknown", confidence:0.0`
+model-backed field carries Gemini Vision's own confidence estimate; when no
+cat is present the normaliser fills `label:"unknown", confidence:0.0`
 rather than fabricating a plausible number.
 
 `mock` is set to true only by the no-API-key fallback in
