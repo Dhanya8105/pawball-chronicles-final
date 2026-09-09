@@ -12,7 +12,7 @@
  */
 
 import type { AuraTrait } from "@pawball/shared-types";
-import type { CvAnalysisResult } from "../../lib/aiServiceClient";
+import type { CvAnalysisResult } from "../capture/cv.service";
 import { AURA_RULES, DEFAULT_AURA_TRAIT, MAX_AURA_TRAITS } from "./aura.data";
 
 export interface DerivedAura {

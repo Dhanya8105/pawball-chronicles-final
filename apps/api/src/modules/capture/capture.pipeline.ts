@@ -16,12 +16,13 @@
  * bails if a Sighting already exists for this capture (BullMQ retry, manual
  * replay), and Region creation is idempotent per grid cell.
  *
- * There is no LLM call here. `services/ai` owns the only model inference in
- * the system; Aura, Lore and Region are rule tables + a seeded RNG.
+ * There is no model call here. `modules/capture/cv.service.ts` owns the only
+ * model inference in the system (Gemini Vision); Aura, Lore and Region are
+ * rule tables + a seeded RNG.
  */
 
 import type { HydratedDocument } from "mongoose";
-import type { CvAnalysisResult } from "../../lib/aiServiceClient";
+import type { CvAnalysisResult } from "./cv.service";
 import { computeSeed } from "../../lib/seededRandom";
 import { MemoryModel } from "../../models/Memory";
 import { PawBallModel, type PawBallDocument } from "../../models/PawBall";

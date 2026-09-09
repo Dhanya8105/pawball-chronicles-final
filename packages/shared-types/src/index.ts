@@ -47,8 +47,8 @@ export interface CvAnalysisResult {
   coat: { color: string; pattern: string; confidence: number | null };
   estimatedAgeGroup: ConfidenceValue<AgeGroup>;
   surroundings: { label: string; confidence: number }[];
-  /** true when services/ai returned the no-API-key placeholder rather than
-   * a real Gemini Vision analysis. */
+  /** true when apps/api's cv.service returned the no-API-key placeholder
+   * instead of a real Gemini Vision analysis. */
   mock?: boolean;
 }
 

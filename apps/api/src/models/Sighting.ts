@@ -15,7 +15,7 @@
  * `cvSnapshot` is a frozen copy of the CV output at capture time —
  * `pawballs.visualProfile` can drift/improve over later sightings, this is
  * the historical record. Stored as Mixed for the same reason
- * captures.cvResult is (the shape still tracks services/ai).
+ * captures.cvResult is (the shape still tracks cv.service).
  */
 
 import { Schema, model, type InferSchemaType, type Model } from "mongoose";

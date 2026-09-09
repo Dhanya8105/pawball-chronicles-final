@@ -22,15 +22,15 @@ export const BIOMES: readonly Biome[] = [
 ];
 
 /**
- * CV surroundings label -> biome. The CV service (Gemini Vision) is
- * constrained to a fixed 17-label vocabulary — see SYSTEM_PROMPT in
- * services/ai/app/services/vision_cv.py — and every one of those labels is
- * mapped here. Labels are confidence-sorted, so the first that appears here
- * wins. The extra legacy keys (trees, water, marketplace, ...) are kept so
- * older stored data still resolves.
+ * CV surroundings label -> biome. Gemini Vision is constrained to a fixed
+ * 17-label vocabulary — see SYSTEM_PROMPT in modules/capture/cv.service.ts —
+ * and every one of those labels is mapped here. Labels are confidence-
+ * sorted, so the first that appears here wins. The extra legacy keys
+ * (trees, water, marketplace, ...) are kept so older stored data still
+ * resolves.
  */
 const SURROUNDING_TO_BIOME: Record<string, Biome> = {
-  // --- CV vocabulary (vision_cv.py SYSTEM_PROMPT) ---
+  // --- CV vocabulary (cv.service.ts SYSTEM_PROMPT) ---
   temple: "sanctum",
   shrine: "sanctum",
   garden: "grove",

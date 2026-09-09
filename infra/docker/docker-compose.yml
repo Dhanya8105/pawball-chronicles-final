@@ -1,15 +1,12 @@
-version: "3.9"
-
-# Local dev stack. Runs every service Placeholder-image-gen-capable end to end
-# without any GPU provisioning — set IMAGE_GEN_PROVIDER=comfyui on the ai
-# service once a real GPU host (local or remote) is available; no other
-# service in this file needs to change.
+# Local dev stack: Mongo + Redis + apps/api + apps/web.
 #
-# NOTE: build context for web/api is the repo root (../..), not their own
-# app folders — apps/api/Dockerfile and apps/web/Dockerfile both copy from
-# the workspace root (package.json, packages/shared-types) since they're
-# npm workspace members, not standalone packages. This compose file lives at
-# infra/docker/, so paths below are relative to that location.
+# Computer vision now runs inside apps/api (modules/capture/cv.service.ts,
+# a direct Gemini REST call) — there is no separate AI service any more.
+#
+# Build context for web/api is the repo root (../..), not their own app
+# folders — apps/api/Dockerfile and apps/web/Dockerfile copy from the
+# workspace root (package.json, packages/shared-types). This compose file
+# lives at infra/docker/, so paths below are relative to that location.
 
 services:
   mongo:
@@ -21,37 +18,21 @@ services:
     image: redis:7-alpine
     ports: ["6379:6379"]
 
-  ai:
-    build:
-      context: ../../services/ai
-      dockerfile: Dockerfile
-    ports: ["8000:8000"]
-    environment:
-      - IMAGE_GEN_PROVIDER=placeholder
-      - IMAGE_GEN_FALLBACK_CHAIN=placeholder
-      # CV is Gemini Vision. Without a key the /cv/analyze endpoint returns
-      # a labelled mock so the stack still runs end-to-end.
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-    volumes:
-      - ../../services/ai/app:/app/app  # live-reload mount for dev
-
   api:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
     ports: ["4000:4000"]
-    depends_on: [mongo, redis, ai]
+    depends_on: [mongo, redis]
     environment:
       - NODE_ENV=development
       - PORT=4000
       - CORS_ORIGIN=http://localhost:3000
       - MONGO_URI=mongodb://mongo:27017/pawball
       - REDIS_URL=redis://redis:6379
-      - AI_SERVICE_URL=http://ai:8000
+      # CV: direct Gemini REST call. Without a key -> labelled mock CV result.
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}

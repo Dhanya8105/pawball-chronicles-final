@@ -26,7 +26,7 @@
 import type { BondLevel } from "@pawball/shared-types";
 import { PawBallModel } from "../../models/PawBall";
 import { SightingModel } from "../../models/Sighting";
-import type { CvAnalysisResult } from "../../lib/aiServiceClient";
+import type { CvAnalysisResult } from "../capture/cv.service";
 
 /** Candidate must have a prior sighting within this distance to be judged
  * the same cat. ~250m — tight enough that two different tabbies on opposite

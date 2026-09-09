@@ -66,7 +66,13 @@ export const config = {
 
   googleClientId: readEnv("GOOGLE_CLIENT_ID"),
   googleClientSecret: readEnv("GOOGLE_CLIENT_SECRET"),
-  aiServiceUrl: readEnv("AI_SERVICE_URL", "http://localhost:8000"),
+
+  // Computer vision runs in-process now (modules/capture/cv.service.ts) via
+  // the Gemini REST API. Unset GEMINI_API_KEY -> a labelled mock CV result,
+  // so the pipeline still runs in local dev. Free key: aistudio.google.com.
+  geminiApiKey: readEnv("GEMINI_API_KEY"),
+  geminiModel: readEnv("GEMINI_MODEL", "gemini-flash-lite-latest")!,
+
   cloudinary: {
     cloudName: readEnv("CLOUDINARY_CLOUD_NAME"),
     apiKey: readEnv("CLOUDINARY_API_KEY"),
