@@ -1,18 +1,27 @@
 /**
  * apps/api/src/modules/capture/capture.service.ts
  *
- * Milestone 3 update: createCapture now enqueues an analyze-capture BullMQ
- * job after persisting the capture, so the upload request still returns
- * immediately (per docs/architecture/01-system-architecture.md §2) while
- * the actual /cv/analyze call happens in the background worker
- * (jobs/analyzeCapture.ts). The capture stays in 'pending_analysis' until
- * that worker picks up the job and either moves it to 'analyzed' or
- * 'failed'.
+ * createCapture has two modes, chosen by whether Redis is configured:
+ *
+ *   - Queued (REDIS_URL set): persist the capture, enqueue an analyze-capture
+ *     BullMQ job, and return immediately in 'pending_analysis'. The worker
+ *     (jobs/analyzeCapture.ts) runs the CV call + deterministic pipeline and
+ *     the client polls GET /captures/:id to completion.
+ *
+ *   - Synchronous (no REDIS_URL): there is no worker to run the job, so the
+ *     full pipeline — Gemini Vision CV then region/bond/aura/lore — runs
+ *     inline in this request. It returns the finished card (status
+ *     'complete') or a rejection (status 'failed') in one shot, so the
+ *     client needs no polling. This costs the POST 5–10s while Gemini runs.
  */
 
+import type { PawBallDetail } from "@pawball/shared-types";
 import { ApiError } from "../../middleware/errorHandler";
 import { uploadOriginalCapture } from "../../lib/cloudinary";
 import { analyzeCaptureQueue } from "../../queues/analyzeCaptureQueue";
+import { getPawballDetail } from "../pawball/pawball.service";
+import { analyzeImage } from "./cv.service";
+import { runCapturePipeline } from "./capture.pipeline";
 import { CaptureModel, type CaptureDocument } from "./capture.model";
 
 export interface CreateCaptureInput {
@@ -23,9 +32,20 @@ export interface CreateCaptureInput {
   capturedAt?: Date;
 }
 
+export interface CreateCaptureResult {
+  capture: CaptureDocument;
+  /** Set only in synchronous mode once the pipeline reaches 'complete'. */
+  pawball?: PawBallDetail;
+  bondResult?: {
+    pawballId: string;
+    isNewPawball: boolean;
+    similarityScore?: number | null;
+  };
+}
+
 export async function createCapture(
   input: CreateCaptureInput
-): Promise<CaptureDocument> {
+): Promise<CreateCaptureResult> {
   const originalImageUrl = await uploadOriginalCapture(input.imageBuffer, input.ownerId);
 
   const capture = await CaptureModel.create({
@@ -36,10 +56,7 @@ export async function createCapture(
     capturedAt: input.capturedAt ?? new Date(),
   });
 
-  // Redis is optional. If it's not configured, or the enqueue fails
-  // (Redis down), the capture is still persisted and returned — it just
-  // stays 'pending_analysis' with no background analysis. The upload
-  // request never fails for a queue problem.
+  // --- Queued mode: Redis is configured -------------------------------------
   if (analyzeCaptureQueue) {
     try {
       await analyzeCaptureQueue.add(
@@ -54,14 +71,46 @@ export async function createCapture(
         (err as Error).message
       );
     }
-  } else {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[capture] Redis not configured — capture ${capture._id.toString()} not queued for analysis`
-    );
+    return { capture };
   }
 
-  return capture;
+  // --- Synchronous mode: no Redis, no worker — run the pipeline inline ------
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[capture] Redis not configured — running analysis synchronously for capture ${capture._id.toString()}`
+  );
+  try {
+    const cvResult = await analyzeImage(capture.originalImageUrl);
+    capture.status = "analyzed";
+    capture.cvResult = cvResult;
+    await capture.save();
+
+    const outcome = await runCapturePipeline(capture);
+
+    if (outcome.status === "complete" && outcome.pawballId) {
+      const pawball = await getPawballDetail(outcome.pawballId, input.ownerId);
+      return {
+        capture,
+        pawball,
+        bondResult: {
+          pawballId: outcome.pawballId,
+          isNewPawball: outcome.isNewPawball ?? true,
+        },
+      };
+    }
+
+    // Rejected (not a cat / low confidence): the pipeline already set
+    // capture.status = 'failed' and capture.error. Return it as-is.
+    return { capture };
+  } catch (err) {
+    capture.status = "failed";
+    capture.error = {
+      stage: "cv_analysis",
+      message: (err as Error).message,
+    } as CaptureDocument["error"];
+    await capture.save();
+    return { capture };
+  }
 }
 
 export async function getCaptureById(

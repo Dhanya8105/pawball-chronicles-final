@@ -3,9 +3,14 @@
 /**
  * apps/web/src/components/capture/CapturePanel.tsx
  *
- * The capture flow: choose/take a photo -> POST /captures -> poll
- * GET /captures/:id through the pipeline stages -> reveal the resulting
- * PawBallCard (or show a retake prompt if the CV rejected it).
+ * The capture flow: choose/take a photo -> POST /captures -> reveal the
+ * resulting PawBallCard (or show a retake prompt if the CV rejected it).
+ *
+ * Two server modes, both handled here:
+ *   - No-Redis: POST /captures runs the whole pipeline inline (~5–10s) and
+ *     returns { status: 'complete', pawball } — reveal it directly.
+ *   - Queued: POST returns { status: 'pending_analysis' }; poll
+ *     GET /captures/:id through the pipeline stages, then reveal.
  *
  * The loader is the design-spec "5 dots illuminate in sequence, 1.2s apart"
  * — each dot maps to a pipeline stage and lights as that stage is reached.
@@ -102,9 +107,33 @@ export function CapturePanel() {
       form.append("lat", String(lat));
       form.append("lng", String(lng));
       form.append("capturedAt", new Date().toISOString());
-      const { captureId } = await captures.create(form);
+      // In no-Redis mode the API runs the whole pipeline in this request and
+      // takes ~5–10s — show the middle of the loader while we wait.
+      setPhase({ kind: "working", step: 2 });
+      const res = await captures.create(form);
+
+      // Synchronous mode: the card (or rejection) is already in the response.
+      if (res.status === "complete" && res.pawball) {
+        setPhase({
+          kind: "revealed",
+          pawball: res.pawball,
+          isNew: res.bondResult?.isNewPawball ?? true,
+        });
+        return;
+      }
+      if (res.status === "failed") {
+        setPhase({
+          kind: "rejected",
+          message:
+            res.error?.message ??
+            "The Chronicle couldn't read a cat in that photo. Try a clearer, closer shot.",
+        });
+        return;
+      }
+
+      // Queued mode: poll GET /captures/:id through the pipeline stages.
       setPhase({ kind: "working", step: 1 });
-      beginPolling(captureId);
+      beginPolling(res.captureId);
     } catch (err) {
       setPhase({ kind: "error", message: messageFor(err) });
     }

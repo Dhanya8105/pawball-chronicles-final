@@ -254,15 +254,25 @@ export interface RegionInfo {
   biome: Biome;
 }
 
-export interface CaptureResponse {
-  captureId: string;
-  status: CaptureStatus;
-}
-
 export interface CaptureBondResult {
   pawballId: string;
   isNewPawball: boolean;
   similarityScore?: number | null;
+}
+
+export interface CaptureResponse {
+  captureId: string;
+  status: CaptureStatus;
+  /**
+   * Present only when the analysis ran synchronously in the POST /captures
+   * request — i.e. Redis / the BullMQ worker is not configured, so there is
+   * nothing to poll. `status` is then already `complete` (card built) or
+   * `failed` (rejected), and the client reveals `pawball` directly instead
+   * of calling GET /captures/:id on a loop. Absent in queued mode.
+   */
+  pawball?: PawBallDetail;
+  bondResult?: CaptureBondResult;
+  error?: { stage: string; message: string };
 }
 
 export interface CaptureRecord {

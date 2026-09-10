@@ -3,6 +3,7 @@
  */
 
 import type { Request, Response } from "express";
+import type { CaptureResponse } from "@pawball/shared-types";
 import { ApiError } from "../../middleware/errorHandler";
 import { createCaptureFieldsSchema } from "./capture.validators";
 import * as captureService from "./capture.service";
@@ -14,7 +15,7 @@ export async function createCaptureHandler(req: Request, res: Response): Promise
 
   const fields = createCaptureFieldsSchema.parse(req.body);
 
-  const capture = await captureService.createCapture({
+  const { capture, pawball, bondResult } = await captureService.createCapture({
     ownerId: req.userId!,
     imageBuffer: req.file.buffer,
     lat: fields.lat,
@@ -22,10 +23,23 @@ export async function createCaptureHandler(req: Request, res: Response): Promise
     capturedAt: fields.capturedAt,
   });
 
-  res.status(201).json({
-    success: true,
-    data: { captureId: capture._id.toString(), status: capture.status },
-  });
+  // Queued mode returns just { captureId, status: 'pending_analysis' } and the
+  // client polls. Synchronous mode (no Redis) also returns the finished
+  // `pawball` (status 'complete') or the `error` (status 'failed'), so the
+  // client can resolve the capture without polling.
+  const data: CaptureResponse = {
+    captureId: capture._id.toString(),
+    status: capture.status,
+  };
+  if (pawball) {
+    data.pawball = pawball;
+    data.bondResult = bondResult;
+  }
+  if (capture.status === "failed" && capture.error) {
+    data.error = { stage: capture.error.stage, message: capture.error.message };
+  }
+
+  res.status(201).json({ success: true, data });
 }
 
 export async function getCaptureHandler(req: Request, res: Response): Promise<void> {
