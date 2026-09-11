@@ -37,6 +37,8 @@ export class ArtworkGenerationError extends Error {
 }
 
 export interface ArtworkGenInput {
+  /** For the debug log lines below only — not sent to fal.ai. */
+  pawballId: string;
   /** The original capture photo — sent as the image-to-image source, so
    * the generated artwork keeps this cat's actual pose/composition. */
   originalImageUrl: string;
@@ -66,11 +68,19 @@ const NUM_INFERENCE_STEPS = 28;
 const GUIDANCE_SCALE = 3.5;
 
 export async function generateArtwork(input: ArtworkGenInput): Promise<ArtworkGenResult> {
+  // eslint-disable-next-line no-console
+  console.log("[artwork] starting fal.ai generation for pawball", input.pawballId);
+  // eslint-disable-next-line no-console
+  console.log("[artwork] FAL_API_KEY present:", !!config.falApiKey);
+
   if (!config.falApiKey) {
     throw new ArtworkGenerationError("FAL_API_KEY not set");
   }
 
   const prompt = buildPrompt(input);
+  // eslint-disable-next-line no-console
+  console.log("[artwork] calling fal.ai with prompt:", prompt);
+
   const body = JSON.stringify({
     image_url: input.originalImageUrl,
     prompt,
@@ -105,7 +115,12 @@ export async function generateArtwork(input: ArtworkGenInput): Promise<ArtworkGe
       continue;
     }
 
+    // eslint-disable-next-line no-console
+    console.log("[artwork] fal.ai response status:", res.status);
+
     const json = (await res.json().catch(() => ({}))) as FalResponse;
+    // eslint-disable-next-line no-console
+    console.log("[artwork] fal.ai result:", JSON.stringify(json));
 
     if (res.status === 429 || res.status >= 500) {
       lastError = json.detail ? JSON.stringify(json.detail) : `HTTP ${res.status}`;

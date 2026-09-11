@@ -263,6 +263,7 @@ async function applyArtwork(
 ): Promise<void> {
   try {
     const result = await generateArtwork({
+      pawballId: pawball._id.toString(),
       originalImageUrl: capture.originalImageUrl,
       ...input,
     });
