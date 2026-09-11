@@ -12,15 +12,18 @@
  *   - Queued: POST returns { status: 'pending_analysis' }; poll
  *     GET /captures/:id through the pipeline stages, then reveal.
  *
- * The loader is the design-spec "5 dots illuminate in sequence, 1.2s apart"
- * — each dot maps to a pipeline stage and lights as that stage is reached.
+ * The loader (StepPaws, below) is 5 paw prints, one per pipeline stage,
+ * each springing in as its stage is reached — a reskin of the original
+ * "5 dots illuminate in sequence" design, not a decorative-only animation.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { CaptureRecord, PawBallDetail } from "@pawball/shared-types";
 import { ApiError, captures, pawballs } from "@/lib/api";
 import { PawBallCard } from "@/components/cards/PawBallCard";
+import { RevealBurst } from "@/components/effects/RevealBurst";
+import { PAW_PATH } from "@/components/effects/pawPath";
 
 const STAGES = [
   "Uploading photo",
@@ -238,7 +241,7 @@ export function CapturePanel() {
             exit={{ opacity: 0 }}
             className="rounded-card border border-hair bg-card p-6"
           >
-            <StepDots step={phase.step} />
+            <StepPaws step={phase.step} />
             <p className="mt-5 text-center text-sm text-muted">
               {STAGES[Math.min(phase.step, STAGES.length - 1)]}…
             </p>
@@ -257,7 +260,10 @@ export function CapturePanel() {
                 ? "A new legend joins your Chronicle"
                 : "You met this legend again"}
             </p>
-            <PawBallCard pawball={phase.pawball} reveal />
+            <div className="relative">
+              <RevealBurst />
+              <PawBallCard pawball={phase.pawball} reveal />
+            </div>
             <button
               type="button"
               onClick={reset}
@@ -350,27 +356,51 @@ function messageFor(err: unknown): string {
   return "Network error. Check your connection and try again.";
 }
 
-function StepDots({ step }: { step: number }) {
+/**
+ * Requirement 6: the pipeline-progress indicator, reskinned from plain dots
+ * to paw prints that appear one by one (soft spring bounce) as each real
+ * pipeline stage — Uploading / Analyzing / Surroundings / Lore / Reveal —
+ * completes, tracking the actual `step` from polling/sync response rather
+ * than a generic fixed loop, so this stays an accurate progress readout,
+ * not just decoration. The currently-active paw gets a gentle continuous
+ * up-down bob so it reads as "walking" while its stage is in flight.
+ */
+function StepPaws({ step }: { step: number }) {
+  const reduceMotion = useReducedMotion();
   return (
     <div className="flex items-center justify-center gap-3">
       {STAGES.map((_, i) => {
         const lit = i <= step;
+        const active = i === step;
         return (
-          <motion.span
+          <motion.svg
             key={i}
-            className="h-3 w-3 rounded-full"
+            viewBox="0 0 24 24"
+            style={{ width: 14, height: 14 }}
+            initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
             animate={{
-              backgroundColor: lit ? "#5de8c0" : "#2c2545",
-              boxShadow: lit
-                ? "0 0 12px 0 rgba(93,232,192,0.7)"
-                : "0 0 0 0 rgba(0,0,0,0)",
-              scale: i === step ? [1, 1.35, 1] : 1,
+              scale: lit ? (active && !reduceMotion ? [1, 1.3, 1] : 1) : 0.6,
+              opacity: lit ? 1 : 0.3,
+              y: active && !reduceMotion ? [0, -3, 0] : 0,
             }}
-            transition={{
-              backgroundColor: { duration: 0.4 },
-              scale: { duration: 1.2, repeat: i === step ? Infinity : 0 },
-            }}
-          />
+            transition={
+              active && !reduceMotion
+                ? {
+                    scale: { duration: 1.2, repeat: Infinity },
+                    y: { duration: 1.2, repeat: Infinity },
+                    opacity: { type: "spring", stiffness: 400, damping: 20 },
+                  }
+                : { type: "spring", stiffness: 400, damping: 20 }
+            }
+          >
+            <path
+              d={PAW_PATH}
+              fill={lit ? "#5de8c0" : "#2c2545"}
+              style={{
+                filter: lit ? "drop-shadow(0 0 5px rgba(93,232,192,0.7))" : "none",
+              }}
+            />
+          </motion.svg>
         );
       })}
     </div>

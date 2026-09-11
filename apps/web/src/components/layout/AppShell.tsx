@@ -9,11 +9,15 @@
  * guard, no nav) so the sign-in screen isn't wrapped in its own redirect.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuthStore } from "@/lib/store";
 import { BottomNav } from "./BottomNav";
+import {
+  PageTransitionOverlay,
+  TOTAL_DURATION_MS,
+} from "@/components/effects/PageTransitionOverlay";
 
 const PUBLIC_ROUTES = new Set(["/auth"]);
 
@@ -22,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const hydrated = useAuthStore((s) => s.hydrated);
+  const reduceMotion = useReducedMotion();
 
   const isPublic = PUBLIC_ROUTES.has(pathname);
 
@@ -31,9 +36,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [isPublic, hydrated, user, router]);
 
+  // Requirement 2: a paw-print walk plays over the page on every navigation
+  // between the main tabs. `transitionKey` is null except while that's
+  // playing; cleared by a plain timer (TOTAL_DURATION_MS) rather than the
+  // overlay's own animation-completion callback — see PageTransitionOverlay
+  // for why that matters here specifically (it's a full-screen cover).
+  const [transitionKey, setTransitionKey] = useState<string | null>(null);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    if (reduceMotion) return;
+    setTransitionKey(pathname);
+    const timer = setTimeout(() => setTransitionKey(null), TOTAL_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [pathname, reduceMotion]);
+
   if (isPublic) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-app flex-col px-5">
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-app flex-col px-5">
         {children}
       </main>
     );
@@ -42,7 +65,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const ready = hydrated && !!user;
 
   return (
-    <div className="relative mx-auto min-h-screen max-w-app">
+    <div className="relative z-10 mx-auto min-h-screen max-w-app">
+      <AnimatePresence>
+        {transitionKey && <PageTransitionOverlay key={transitionKey} />}
+      </AnimatePresence>
       <AnimatePresence mode="wait">
         {ready ? (
           <motion.main

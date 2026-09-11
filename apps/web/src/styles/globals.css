@@ -72,3 +72,94 @@ h4 {
   color: #f0ebff;
   border-color: rgba(180, 150, 255, 0.18);
 }
+
+/* ---------------------------------------------------------------------
+ * Ambient background effects (components/effects/AtmosphereBackground.tsx):
+ * scattered drifting paw prints + floating cat silhouettes. Pure CSS
+ * keyframes, no JS animation loop — these run for the life of the page.
+ * ------------------------------------------------------------------- */
+
+.pawmotion-field {
+  position: fixed;
+  inset: 0;
+  /* Deliberately NOT negative. A negative z-index on a `position: fixed`
+   * direct child of <body> gets hidden behind body's own propagated
+   * background in some browsers (the canvas-background paint step sits
+   * above negative-z-index content there) — verified live in Chrome: at
+   * z-index:-1 this layer was fully invisible despite correct opacity/
+   * paint otherwise. z-index:0 plus explicit z-index on the app content
+   * above it (AppShell) avoids that trap. */
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pawmotion-paw {
+  position: absolute;
+  color: #a78bfa;
+  opacity: 0;
+  animation-name: pawmotion-drift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes pawmotion-drift {
+  0% {
+    transform: translate(0, 0) rotate(var(--paw-rotate, 0deg));
+    opacity: 0;
+  }
+  12% {
+    opacity: var(--paw-opacity, 0.06);
+  }
+  50% {
+    transform: translate(14px, -18px) rotate(calc(var(--paw-rotate, 0deg) + 25deg));
+    opacity: var(--paw-opacity, 0.06);
+  }
+  88% {
+    opacity: var(--paw-opacity, 0.06);
+  }
+  100% {
+    transform: translate(-10px, 12px) rotate(calc(var(--paw-rotate, 0deg) + 50deg));
+    opacity: 0;
+  }
+}
+
+.pawmotion-cat {
+  position: absolute;
+  color: #a78bfa;
+  opacity: 0.06;
+  animation-name: pawmotion-bob;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+@keyframes pawmotion-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Respect the user's motion preference: every custom animation in this
+ * app (ambient background included) is a `[class*="pawmotion-"]` element,
+ * so this one rule disables all of them at once. Framer-Motion-driven
+ * pieces (page transition, card reveal burst, nav tab bounce, capture
+ * loading paws) check `useReducedMotion()` in JS instead. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="pawmotion-"] {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* Without the drift keyframe running, `.pawmotion-paw`'s resting opacity
+   * is 0 (its animation-start value) — pin it to the same faint, static
+   * opacity the cats settle at, instead of the whole paw field vanishing. */
+  .pawmotion-paw {
+    opacity: var(--paw-opacity, 0.06) !important;
+    transform: none !important;
+  }
+}

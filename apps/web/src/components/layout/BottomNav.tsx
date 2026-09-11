@@ -9,7 +9,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { PAW_PATH } from "@/components/effects/pawPath";
 
 type Tab = { href: string; label: string; icon: React.ReactNode };
 
@@ -76,6 +77,7 @@ function isActive(pathname: string, href: string): boolean {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const reduceMotion = useReducedMotion();
 
   return (
     <nav
@@ -101,6 +103,23 @@ export function BottomNav() {
             )}
             <span className="relative">{tab.icon}</span>
             <span className="relative">{tab.label}</span>
+            {/* Requirement 5: not a layoutId element (those glide between
+                tabs) — this one is only rendered on the active tab's own
+                subtree, so React mounts it fresh every time a different
+                tab becomes active, replaying the spring bounce-in. */}
+            {active && (
+              <motion.svg
+                viewBox="0 0 24 24"
+                fill="#5de8c0"
+                className="absolute -bottom-0.5"
+                style={{ width: 9, height: 9 }}
+                initial={reduceMotion ? false : { scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 15 }}
+              >
+                <path d={PAW_PATH} />
+              </motion.svg>
+            )}
           </Link>
         );
       })}
