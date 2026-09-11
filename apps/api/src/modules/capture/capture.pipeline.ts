@@ -187,15 +187,7 @@ async function createPawBall(
     capturedAt,
   });
 
-  const artwork = await resolveArtwork(capture, {
-    breed,
-    coatColor,
-    fantasyClass: generated.identity.class,
-    element: generated.identity.element,
-    regionName: region.fantasyName,
-  });
-
-  return PawBallModel.create({
+  const pawball = await PawBallModel.create({
     ownerId: capture.ownerId,
     faceEmbeddingId: null,
     identity: generated.identity,
@@ -219,8 +211,10 @@ async function createPawBall(
       lastSeenAt: capturedAt,
     },
     artwork: {
-      currentImageUrl: artwork.url,
-      history: [artwork],
+      // The original photo, unconditionally — this PawBall exists and is
+      // usable immediately, whether or not the fal.ai call below succeeds.
+      currentImageUrl: capture.originalImageUrl,
+      history: [],
     },
     originalPhotoUrl: capture.originalImageUrl,
     homeRegion: { regionId: region.regionId, name: region.fantasyName },
@@ -233,20 +227,31 @@ async function createPawBall(
       },
     ],
   });
+
+  // Fantasy card artwork: fal.ai image-to-image, run after the PawBall is
+  // saved (not before/inline with creation) so a slow or failed call never
+  // delays the card from existing — it already has the original photo as
+  // its artwork either way. Updates pawball.artwork.currentImageUrl in
+  // place on success; fails silently on any error, per applyArtwork below.
+  await applyArtwork(pawball, capture, {
+    breed,
+    coatColor,
+    fantasyClass: generated.identity.class,
+    element: generated.identity.element,
+    regionName: region.fantasyName,
+  });
+
+  return pawball;
 }
 
-interface ArtworkResolution {
-  url: string;
-  generatedAt: Date;
-  providerUsed: string;
-}
-
-/** Fantasy card artwork, generated once when a new PawBall is created (not
- * on repeat sightings of an already-owned cat). Falls back to the original
- * capture photo — same "never hard-fail a capture on a generation step"
- * pattern as the CV and lore Gemini calls — if FAL_API_KEY is unset or the
- * fal.ai call fails after retries. */
-async function resolveArtwork(
+/** Fails silently: no FAL_API_KEY, a network error, a timeout, or a bad
+ * fal.ai response all just leave `pawball.artwork.currentImageUrl` as the
+ * original capture photo it was created with — same "never hard-fail a
+ * capture on a generation step" pattern as the CV and lore Gemini calls.
+ * Not called for repeat sightings of an already-owned cat, only once when
+ * a new PawBall is created (see createPawBall above). */
+async function applyArtwork(
+  pawball: PawBallDoc,
   capture: CaptureDoc,
   input: {
     breed: string;
@@ -255,20 +260,25 @@ async function resolveArtwork(
     element: string;
     regionName: string;
   }
-): Promise<ArtworkResolution> {
+): Promise<void> {
   try {
     const result = await generateArtwork({
       originalImageUrl: capture.originalImageUrl,
       ...input,
     });
-    return { url: result.imageUrl, generatedAt: new Date(), providerUsed: result.providerUsed };
+    pawball.artwork.currentImageUrl = result.imageUrl;
+    pawball.artwork.history.push({
+      url: result.imageUrl,
+      generatedAt: new Date(),
+      providerUsed: result.providerUsed,
+    } as PawBallDocument["artwork"]["history"][number]);
+    await pawball.save();
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(
-      `[artwork] fal.ai generation failed for capture ${capture._id.toString()} — falling back to the original photo:`,
+      `[artwork] fal.ai generation failed for PawBall ${pawball._id.toString()} — keeping the original photo:`,
       (err as Error).message
     );
-    return { url: capture.originalImageUrl, generatedAt: new Date(), providerUsed: "original-photo" };
   }
 }
 
