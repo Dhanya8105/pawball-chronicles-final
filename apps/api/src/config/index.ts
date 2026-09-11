@@ -73,6 +73,12 @@ export const config = {
   geminiApiKey: readEnv("GEMINI_API_KEY"),
   geminiModel: readEnv("GEMINI_MODEL", "gemini-flash-lite-latest")!,
 
+  // Fantasy card artwork (modules/artwork/artwork.service.ts) via fal.ai's
+  // flux/dev/image-to-image REST API. Unset FAL_API_KEY -> the original
+  // capture photo stays the card artwork, same "never hard-fail on a
+  // generation step" fallback as CV and lore. Free credits: fal.ai/dashboard/keys.
+  falApiKey: readEnv("FAL_API_KEY"),
+
   cloudinary: {
     cloudName: readEnv("CLOUDINARY_CLOUD_NAME"),
     apiKey: readEnv("CLOUDINARY_API_KEY"),

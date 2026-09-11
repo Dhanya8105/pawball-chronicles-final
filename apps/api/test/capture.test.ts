@@ -49,9 +49,10 @@ describe("POST /api/v1/captures", () => {
   it("runs the pipeline synchronously and returns the finished card when Redis is disabled", async () => {
     // `npm test` sets no REDIS_URL, so createCapture runs the CV +
     // deterministic pipeline inline and the response already carries the
-    // built PawBall (no polling). GEMINI_API_KEY is unset here too, so both
-    // the CV step and the lore step return their labelled/templated
-    // fallbacks — enough to drive the pipeline end to end.
+    // built PawBall (no polling). GEMINI_API_KEY and FAL_API_KEY are unset
+    // here too, so the CV, lore, and artwork steps all return their
+    // labelled/templated/original-photo fallbacks — enough to drive the
+    // pipeline end to end.
     const token = await registerAndGetToken("capture1@pawball.test");
 
     const res = await request(app)
@@ -70,6 +71,10 @@ describe("POST /api/v1/captures", () => {
     expect(res.body.data.pawball.loreText.length).toBeGreaterThan(0);
     expect(typeof res.body.data.pawball.personality).toBe("string");
     expect(res.body.data.pawball.personality.length).toBeGreaterThan(0);
+    // No FAL_API_KEY -> artwork falls back to the original capture photo.
+    expect(res.body.data.pawball.artwork.currentImageUrl).toBe(
+      res.body.data.pawball.originalPhotoUrl
+    );
     expect(res.body.data.bondResult.isNewPawball).toBe(true);
   });
 

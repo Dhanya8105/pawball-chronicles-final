@@ -33,6 +33,9 @@ services:
       # CV: direct Gemini REST call. Without a key -> labelled mock CV result.
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
+      # Card artwork: direct fal.ai REST call. Without a key -> the original
+      # capture photo stays the card artwork.
+      - FAL_API_KEY=${FAL_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}

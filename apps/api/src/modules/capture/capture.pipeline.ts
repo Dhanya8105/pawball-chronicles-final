@@ -30,6 +30,7 @@ import { SightingModel } from "../../models/Sighting";
 import { toGeoPoint } from "../../models/geo";
 import { deriveAura } from "../aura/aura.engine";
 import { nextBondLevel, resolveBond } from "../bond/bond.engine";
+import { generateArtwork } from "../artwork/artwork.service";
 import { generateIdentity } from "../lore/lore.engine";
 import { resolveRegion } from "../region/region.engine";
 import type { CaptureDocument } from "./capture.model";
@@ -186,6 +187,14 @@ async function createPawBall(
     capturedAt,
   });
 
+  const artwork = await resolveArtwork(capture, {
+    breed,
+    coatColor,
+    fantasyClass: generated.identity.class,
+    element: generated.identity.element,
+    regionName: region.fantasyName,
+  });
+
   return PawBallModel.create({
     ownerId: capture.ownerId,
     faceEmbeddingId: null,
@@ -210,10 +219,8 @@ async function createPawBall(
       lastSeenAt: capturedAt,
     },
     artwork: {
-      // Real FLUX/SDXL artwork is Milestone 6. Until then the card shows the
-      // original capture photo — honest placeholder, never a fake render.
-      currentImageUrl: capture.originalImageUrl,
-      history: [],
+      currentImageUrl: artwork.url,
+      history: [artwork],
     },
     originalPhotoUrl: capture.originalImageUrl,
     homeRegion: { regionId: region.regionId, name: region.fantasyName },
@@ -226,6 +233,43 @@ async function createPawBall(
       },
     ],
   });
+}
+
+interface ArtworkResolution {
+  url: string;
+  generatedAt: Date;
+  providerUsed: string;
+}
+
+/** Fantasy card artwork, generated once when a new PawBall is created (not
+ * on repeat sightings of an already-owned cat). Falls back to the original
+ * capture photo — same "never hard-fail a capture on a generation step"
+ * pattern as the CV and lore Gemini calls — if FAL_API_KEY is unset or the
+ * fal.ai call fails after retries. */
+async function resolveArtwork(
+  capture: CaptureDoc,
+  input: {
+    breed: string;
+    coatColor: string;
+    fantasyClass: string;
+    element: string;
+    regionName: string;
+  }
+): Promise<ArtworkResolution> {
+  try {
+    const result = await generateArtwork({
+      originalImageUrl: capture.originalImageUrl,
+      ...input,
+    });
+    return { url: result.imageUrl, generatedAt: new Date(), providerUsed: result.providerUsed };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[artwork] fal.ai generation failed for capture ${capture._id.toString()} — falling back to the original photo:`,
+      (err as Error).message
+    );
+    return { url: capture.originalImageUrl, generatedAt: new Date(), providerUsed: "original-photo" };
+  }
 }
 
 async function recordRepeatSighting(

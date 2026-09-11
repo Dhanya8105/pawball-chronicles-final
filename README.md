@@ -7,9 +7,9 @@ turns it into a collectible RPG legend — bonded to where and when you found
 it. Pokémon GO meets a trading-card game.
 
 Three parts: **apps/web** (Next.js 15 PWA), **apps/api** (Express + TS — auth,
-the capture pipeline, the deterministic Region/Bond/Aura/Lore engines, and
-in-process Gemini Vision CV), and **packages/shared-types** (the API
-contract). No separate AI service.
+the capture pipeline, the deterministic Region/Bond/Aura/Lore engines,
+in-process Gemini Vision CV, Gemini lore prose, and fal.ai card artwork),
+and **packages/shared-types** (the API contract). No separate AI service.
 
 ---
 
@@ -28,8 +28,9 @@ cd infra/docker && docker compose up -d mongo redis
 ```bash
 cd apps/api
 cp .env.example .env
-# Add GEMINI_API_KEY (aistudio.google.com/app/apikey — free) and
-# CLOUDINARY_CLOUD_NAME / API_KEY / API_SECRET
+# Add GEMINI_API_KEY (aistudio.google.com/app/apikey — free),
+# CLOUDINARY_CLOUD_NAME / API_KEY / API_SECRET, and optionally
+# FAL_API_KEY (fal.ai/dashboard/keys) for real card artwork
 npm install && npm run dev
 ```
 
@@ -47,6 +48,7 @@ npm install && npm run dev
 |-----|-------------|-------|
 | GEMINI_API_KEY | aistudio.google.com/app/apikey | Yes |
 | CLOUDINARY_* | cloudinary.com dashboard | Yes |
+| FAL_API_KEY | fal.ai/dashboard/keys | Trial credits, then paid |
 | JWT_SECRET / JWT_REFRESH_SECRET | any random strings | n/a |
 
 Without `GEMINI_API_KEY`, the CV step (`modules/capture/cv.service.ts`)
@@ -54,16 +56,20 @@ returns a labelled mock (`"mock": true`, 0-confidence), and the lore step
 (`modules/lore/lore.gemini.ts` — origin lore, personality, weekly updates)
 falls back to its seeded template pools — so the pipeline still runs fully
 offline. Without `CLOUDINARY_*`, the capture upload step returns `503` —
-there is no local fallback. `REDIS_URL` is optional: unset it and the API
-still boots and serves every route, but the BullMQ workers don't run
-(captures stay `pending_analysis`, weekly-life is manual-only via
-`runWeeklyLifeTick()`).
+there is no local fallback. Without `FAL_API_KEY`, the artwork step
+(`modules/artwork/artwork.service.ts`) is skipped and the card's artwork
+stays the original capture photo, same as before this feature existed.
+`REDIS_URL` is optional: unset it and the API still boots and serves every
+route, but the BullMQ workers don't run (captures stay `pending_analysis`,
+weekly-life is manual-only via `runWeeklyLifeTick()`).
 
 ## What works end-to-end
 
 - Auth (register / login / JWT refresh)
 - Cat capture → in-process Gemini Vision CV → deterministic RPG identity
 - Real breed, coat, pose, surroundings drive rarity/element/region/lore
+- Fantasy card artwork generated from the capture photo (fal.ai
+  flux/dev/image-to-image), falling back to the original photo
 - Collection with rarity filter + bond progression
 - Map with Leaflet + rarity-coloured markers
 - Journal with timeline (discovered / bond / weekly life)
@@ -93,7 +99,7 @@ cd apps/web && npx tsc --noEmit && npm run build
 ## Quick start (Docker, full stack)
 
 ```bash
-cp .env.example .env          # fill GEMINI_API_KEY + CLOUDINARY_* + JWT secrets
+cp .env.example .env          # fill GEMINI_API_KEY + CLOUDINARY_* + FAL_API_KEY + JWT secrets
 cd infra/docker
 docker compose build
 docker compose up
@@ -114,6 +120,7 @@ Annotated master list: `.env.example` at the repo root. Per-service copies:
 | `CLOUDINARY_*` | apps/api | Needed for capture upload (no fallback) |
 | `GEMINI_API_KEY` | apps/api | Optional — mock CV and templated lore without it |
 | `GEMINI_MODEL` | apps/api | Optional — defaults to `gemini-flash-lite-latest` |
+| `FAL_API_KEY` | apps/api | Optional — card artwork stays the original capture photo without it |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | apps/api | Optional — only for `POST /auth/google` |
 | `NEXT_PUBLIC_API_URL` | apps/web | Yes — defaults to `http://localhost:4000/api/v1` |
 
@@ -156,5 +163,10 @@ docs/
 - **Bond re-identification** currently matches on owner + breed + coat within
   ~250m of a prior sighting (documented interim for a future CLIP-embedding +
   FAISS approach).
-- **Artwork** is the original capture photo for now; real FLUX/SDXL
-  generation is a later milestone.
+- **Artwork.** A new PawBall's card artwork is generated once, at creation,
+  by fal.ai's `flux/dev/image-to-image` (`modules/artwork/artwork.service.ts`,
+  a direct REST call — image-to-image so the actual cat's pose/composition
+  carries into the illustration) from a prompt built off breed, coat color,
+  fantasy class, element and home region. Falls back to the original capture
+  photo if `FAL_API_KEY` is unset or the call fails; repeat sightings of an
+  already-owned cat don't regenerate it.
