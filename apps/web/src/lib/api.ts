@@ -6,6 +6,13 @@
  * a 401 does exactly one refresh-and-retry before clearing the session.
  * All endpoint groups (auth / captures / collection / pawballs / map) are
  * exported as small typed namespaces so pages never build URLs by hand.
+ *
+ * Refresh flow: access tokens expire after 15 minutes. Any `auth: true`
+ * request that comes back 401 triggers `authSession.refreshTokens()`
+ * (lib/store.ts, which owns the actual POST /auth/refresh call) and, on
+ * success, retries the original request once with the new access token. If
+ * the refresh token has also expired, the session is cleared and the user
+ * is sent to /auth to log in again.
  */
 
 "use client";
@@ -13,7 +20,6 @@
 import type {
   ApiResponse,
   AuthResponse,
-  AuthTokens,
   CaptureListResponse,
   CaptureRecord,
   CaptureResponse,
@@ -29,9 +35,9 @@ import type {
   TimelineItem,
 } from "@pawball/shared-types";
 import { authSession } from "./store";
+import { API_BASE_URL } from "./config";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+const BASE_URL = API_BASE_URL;
 
 export class ApiError extends Error {
   constructor(
@@ -113,31 +119,39 @@ async function refreshAndRetry<T>(
   headers: Record<string, string>,
   isForm: boolean
 ): Promise<{ ok: boolean; data?: T }> {
-  const { refreshToken } = authSession.get();
-  if (!refreshToken) {
+  const refreshed = await authSession.refreshTokens();
+  if (!refreshed) {
+    // The refresh token itself has expired (or the refresh call failed
+    // outright) — the session is unrecoverable without a new login.
     authSession.clear();
+    redirectToAuth();
     return { ok: false };
   }
-  try {
-    const tokens = await send<AuthTokens>("/auth/refresh", {
-      method: "POST",
-      body: { refreshToken },
-    });
-    authSession.setTokens(tokens.accessToken, tokens.refreshToken);
-    const res = await fetch(buildUrl(path, opts.query), {
-      method: opts.method ?? "GET",
-      headers: { ...headers, Authorization: `Bearer ${tokens.accessToken}` },
-      body: isForm
-        ? (opts.body as FormData)
-        : opts.body !== undefined
-          ? JSON.stringify(opts.body)
-          : undefined,
-    });
-    return { ok: true, data: await unwrap<T>(res) };
-  } catch {
-    authSession.clear();
-    return { ok: false };
-  }
+
+  // Refresh succeeded — retry the original request once with the new
+  // access token. Let a failure here (network error, or the API rejecting
+  // the freshly-issued token) propagate as a normal ApiError/exception
+  // rather than clearing the session — refreshTokens() already proved the
+  // session itself is fine.
+  const { accessToken } = authSession.get();
+  const res = await fetch(buildUrl(path, opts.query), {
+    method: opts.method ?? "GET",
+    headers: { ...headers, Authorization: `Bearer ${accessToken}` },
+    body: isForm
+      ? (opts.body as FormData)
+      : opts.body !== undefined
+        ? JSON.stringify(opts.body)
+        : undefined,
+  });
+  return { ok: true, data: await unwrap<T>(res) };
+}
+
+/** The refresh token itself has expired (or refresh failed outright) — the
+ * session is unrecoverable without a new login. */
+function redirectToAuth(): void {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname === "/auth") return;
+  window.location.href = "/auth";
 }
 
 // --- endpoint groups -----------------------------------------------------
