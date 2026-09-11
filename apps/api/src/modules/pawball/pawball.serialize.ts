@@ -134,6 +134,7 @@ export function toPawBallDetail(pb: PawBallLike): PawBallDetail {
     })),
     stats: statsOf(pb),
     loreText: (record.loreText as string) ?? "",
+    personality: (record.personality as string) ?? "",
     favoriteRestingPlace: resting ?? null,
   };
 }

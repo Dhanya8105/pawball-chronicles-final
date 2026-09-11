@@ -50,11 +50,14 @@ npm install && npm run dev
 | JWT_SECRET / JWT_REFRESH_SECRET | any random strings | n/a |
 
 Without `GEMINI_API_KEY`, the CV step (`modules/capture/cv.service.ts`)
-returns a labelled mock (`"mock": true`, 0-confidence) so the pipeline still
-runs. Without `CLOUDINARY_*`, the capture upload step returns `503` — there
-is no local fallback. `REDIS_URL` is optional: unset it and the API still
-boots and serves every route, but the BullMQ workers don't run (captures
-stay `pending_analysis`, weekly-life is manual-only via `runWeeklyLifeTick()`).
+returns a labelled mock (`"mock": true`, 0-confidence), and the lore step
+(`modules/lore/lore.gemini.ts` — origin lore, personality, weekly updates)
+falls back to its seeded template pools — so the pipeline still runs fully
+offline. Without `CLOUDINARY_*`, the capture upload step returns `503` —
+there is no local fallback. `REDIS_URL` is optional: unset it and the API
+still boots and serves every route, but the BullMQ workers don't run
+(captures stay `pending_analysis`, weekly-life is manual-only via
+`runWeeklyLifeTick()`).
 
 ## What works end-to-end
 
@@ -109,7 +112,7 @@ Annotated master list: `.env.example` at the repo root. Per-service copies:
 | `REDIS_URL` | apps/api | **Optional** — unset/empty disables the BullMQ workers; all HTTP routes and capture upload still work, captures stay `pending_analysis` |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | apps/api | Yes |
 | `CLOUDINARY_*` | apps/api | Needed for capture upload (no fallback) |
-| `GEMINI_API_KEY` | apps/api | Optional — mock CV without it |
+| `GEMINI_API_KEY` | apps/api | Optional — mock CV and templated lore without it |
 | `GEMINI_MODEL` | apps/api | Optional — defaults to `gemini-flash-lite-latest` |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | apps/api | Optional — only for `POST /auth/google` |
 | `NEXT_PUBLIC_API_URL` | apps/web | Yes — defaults to `http://localhost:4000/api/v1` |
@@ -132,12 +135,20 @@ docs/
 
 ## Architecture notes
 
-- **Deterministic engines, not LLM black boxes.** Region, Bond, Aura, and Lore
-  are rule tables + a seeded mulberry32 RNG in `apps/api/src/modules/`. The
-  seed is `sha256(userId | capturedAt | breed | coatColor)`, so a capture is
-  fully reproducible and unit-testable. The only model call in the system is
-  the Gemini Vision CV in `modules/capture/cv.service.ts` — a direct REST
-  call, no SDK, no separate service.
+- **Deterministic engines, with one intentional exception: prose.** Region,
+  Bond, Aura, name, class, element, rarity, stats and abilities are all rule
+  tables + a seeded mulberry32 RNG in `apps/api/src/modules/`. The seed is
+  `sha256(userId | capturedAt | breed | coatColor)`, so all of that is fully
+  reproducible and unit-testable regardless of what happens with Gemini.
+  The one thing that isn't: a PawBall's `loreText` + `personality`, and its
+  weekly life-update sentence, are real Gemini calls
+  (`modules/lore/lore.gemini.ts`) — a template pool can't write text that's
+  actually specific to one cat. Both fall back to the old seeded-template
+  pools if `GEMINI_API_KEY` is unset or the call fails after retries, so a
+  capture or a weekly-life run never hard-fails on flavor text. The other
+  model call in the system is the Gemini Vision CV in
+  `modules/capture/cv.service.ts` — both are direct REST calls, no SDK, no
+  separate service.
 - **CV vocabulary is pinned.** The Gemini prompt constrains `coat.color` and
   `surroundings` to fixed lists that match the engine lookup tables exactly,
   so the CV reading drives class / element / rarity / region instead of

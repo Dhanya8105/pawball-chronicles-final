@@ -173,7 +173,7 @@ async function createPawBall(
   const aura = deriveAura(cv);
   const seed = computeSeed([ownerId, capturedAt.toISOString(), breed, coatColor]);
 
-  const generated = generateIdentity({
+  const generated = await generateIdentity({
     seed,
     breed,
     coatColor,
@@ -201,6 +201,7 @@ async function createPawBall(
     abilities: generated.abilities,
     stats: generated.stats,
     loreText: generated.loreText,
+    personality: generated.personality,
     bond: {
       level: "stranger",
       levelNumeric: 0,

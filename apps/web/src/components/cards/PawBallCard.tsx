@@ -155,6 +155,16 @@ export function PawBallCard({
           />
         </div>
 
+        {/* Personality */}
+        {pawball.personality && (
+          <div>
+            <SectionLabel>Personality</SectionLabel>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted">
+              {pawball.personality}
+            </p>
+          </div>
+        )}
+
         {/* Lore */}
         {pawball.loreText && (
           <div>

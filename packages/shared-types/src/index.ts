@@ -151,6 +151,10 @@ export interface PawBallDetail extends PawBallSummary {
   titlesEarned: { title: string; earnedAt: string; reason: string }[];
   stats: PawBallStats;
   loreText: string;
+  /** 1-2 sentences on how this cat behaves, from the same Gemini call as
+   * loreText (modules/lore/lore.gemini.ts) — falls back to a short
+   * template line if Gemini is unavailable. */
+  personality: string;
   favoriteRestingPlace: { lat: number; lng: number; label: string } | null;
 }
 

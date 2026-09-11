@@ -49,8 +49,9 @@ describe("POST /api/v1/captures", () => {
   it("runs the pipeline synchronously and returns the finished card when Redis is disabled", async () => {
     // `npm test` sets no REDIS_URL, so createCapture runs the CV +
     // deterministic pipeline inline and the response already carries the
-    // built PawBall (no polling). GEMINI_API_KEY is unset here too, so the
-    // CV step returns its labelled mock — enough to drive the pipeline.
+    // built PawBall (no polling). GEMINI_API_KEY is unset here too, so both
+    // the CV step and the lore step return their labelled/templated
+    // fallbacks — enough to drive the pipeline end to end.
     const token = await registerAndGetToken("capture1@pawball.test");
 
     const res = await request(app)
@@ -65,6 +66,10 @@ describe("POST /api/v1/captures", () => {
     expect(typeof res.body.data.captureId).toBe("string");
     expect(res.body.data.pawball).toBeTruthy();
     expect(typeof res.body.data.pawball.identity.fantasyName).toBe("string");
+    expect(typeof res.body.data.pawball.loreText).toBe("string");
+    expect(res.body.data.pawball.loreText.length).toBeGreaterThan(0);
+    expect(typeof res.body.data.pawball.personality).toBe("string");
+    expect(res.body.data.pawball.personality.length).toBeGreaterThan(0);
     expect(res.body.data.bondResult.isNewPawball).toBe(true);
   });
 
